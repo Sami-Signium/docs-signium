@@ -670,34 +670,60 @@
           <!-- UPLOAD MODE -->
           <div id="upload-mode">
             <div class="form-section">
-              <div class="form-section-title">Datei hochladen</div>
-
-              <div class="upload-zone" id="upload-zone">
-                <input type="file" id="file-input" accept=".pdf,.doc,.docx,.txt" onchange="handleFileSelect(event)">
+              <div class="form-section-title">1 · CV des Kandidaten</div>
+              <div class="upload-zone" id="upload-zone-cv">
+                <input type="file" id="file-input-cv" accept=".pdf,.doc,.docx,.txt" onchange="handleFileSelect(event, 'cv')">
                 <div class="upload-icon">📄</div>
-                <div class="upload-label">PDF, Word (.docx) oder Text-Datei hierher ziehen</div>
+                <div class="upload-label">CV hochladen (PDF oder Word)</div>
                 <div class="upload-hint">oder klicken zum Auswählen · Max. 10 MB</div>
               </div>
-
-              <div class="upload-file-info" id="file-info">
-                <span id="file-name-display">—</span>
-                <button class="upload-file-remove" onclick="removeFile()">✕</button>
+              <div class="upload-file-info" id="file-info-cv">
+                <span id="file-name-cv">—</span>
+                <button class="upload-file-remove" onclick="removeFile('cv')">✕</button>
               </div>
+            </div>
 
-              <span class="upload-purpose-label">Zweck der Datei</span>
-              <div class="upload-purpose-btns">
-                <button class="purpose-btn active" onclick="setPurpose('kandidat', this)">Kandidatenprofil → Bericht</button>
-                <button class="purpose-btn" onclick="setPurpose('pitch', this)">Pitch-Brief → Stil-Vorlage</button>
-                <button class="purpose-btn" onclick="setPurpose('notizen', this)">Notizen / Anweisungen</button>
+            <div class="form-section" style="margin-top:20px;">
+              <div class="form-section-title">2 · Deine Notizen zum Kandidaten</div>
+              <div class="upload-zone" id="upload-zone-notes">
+                <input type="file" id="file-input-notes" accept=".pdf,.doc,.docx,.txt" onchange="handleFileSelect(event, 'notes')">
+                <div class="upload-icon">📝</div>
+                <div class="upload-label">Notizen hochladen (PDF, Word oder Text)</div>
+                <div class="upload-hint">oder klicken zum Auswählen</div>
               </div>
-
-              <div class="upload-notes">
+              <div class="upload-file-info" id="file-info-notes">
+                <span id="file-name-notes">—</span>
+                <button class="upload-file-remove" onclick="removeFile('notes')">✕</button>
+              </div>
+              <div style="margin-top:16px;">
                 <div class="field-group">
-                  <label class="field-label">Zusätzliche Anweisung (optional)</label>
-                  <textarea class="field-textarea" id="upload-extra" placeholder="z.B. Fokus auf internationale Erfahrung, Ton formeller als üblich, auf Englisch generieren..." style="min-height:80px;"></textarea>
+                  <label class="field-label">Oder Notizen direkt eintippen</label>
+                  <textarea class="field-textarea" id="notes-text" placeholder="Persönlichkeit: offen, direkt, strategisch stark...&#10;Motivation: Unternehmen zieht nach Singapur, will in Europa bleiben...&#10;Gesprächseindruck: authentisch, klare Karrierevorstellung...&#10;Empfehlung: starke Kandidatur für CFO-Rolle..." style="min-height:120px;"></textarea>
                 </div>
               </div>
+            </div>
 
+            <div class="form-section" style="margin-top:16px;">
+              <div class="form-section-title">3 · Zielposition & Klient (optional)</div>
+              <div class="form-row">
+                <div class="field-group">
+                  <label class="field-label">Zielposition</label>
+                  <input class="field-input" id="upload-position" placeholder="CFO, CEO, VP Sales...">
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Klient / Unternehmen</label>
+                  <input class="field-input" id="upload-klient" placeholder="Musterfirma AG (oder leer lassen)">
+                </div>
+              </div>
+              <div class="form-row" style="margin-top:8px;">
+                <div class="field-group">
+                  <label class="field-label">Sprache des Berichts</label>
+                  <select class="field-select" id="upload-sprache">
+                    <option value="deutsch">Deutsch</option>
+                    <option value="englisch">Englisch</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -988,117 +1014,42 @@ function setInputMode(mode) {
 }
 
 // ── FILE UPLOAD ──
-let uploadedFileContent = null;
-let uploadPurpose = 'kandidat';
+let uploadedCV = null;
+let uploadedNotes = null;
 
-function setPurpose(purpose, btn) {
-  uploadPurpose = purpose;
-  document.querySelectorAll('.purpose-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-}
-
-async function handleFileSelect(event) {
+async function handleFileSelect(event, slot) {
   const file = event.target.files[0];
   if (!file) return;
-  await processFile(file);
+  await processFile(file, slot);
 }
 
-// Drag & drop
-document.addEventListener('DOMContentLoaded', () => {
-  const zone = document.getElementById('upload-zone');
-  if (!zone) return;
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-  zone.addEventListener('drop', async e => {
-    e.preventDefault();
-    zone.classList.remove('dragover');
-    const file = e.dataTransfer.files[0];
-    if (file) await processFile(file);
-  });
-});
-
-async function processFile(file) {
+async function processFile(file, slot) {
   const maxSize = 10 * 1024 * 1024;
   if (file.size > maxSize) { alert('Datei zu groß (max. 10 MB).'); return; }
-
   const ext = file.name.split('.').pop().toLowerCase();
-  const allowed = ['pdf','docx','doc','txt'].includes(ext);
-  if (!allowed) { alert('Nur PDF, Word (.docx) und Text-Dateien erlaubt.'); return; }
-
-  document.getElementById('file-name-display').textContent = '⏳ Wird gelesen... ' + file.name;
-  document.getElementById('file-info').classList.add('show');
-
+  if (!['pdf','docx','doc','txt'].includes(ext)) { alert('Nur PDF, Word oder Text.'); return; }
+  const nameEl = document.getElementById('file-name-' + slot);
+  const infoEl = document.getElementById('file-info-' + slot);
+  nameEl.textContent = 'Wird gelesen... ' + file.name;
+  infoEl.classList.add('show');
   try {
     let text = '';
-
-    if (ext === 'txt') {
-      text = await file.text();
-    } else if (ext === 'pdf') {
-      text = await extractPdfText(file);
-    } else if (ext === 'docx' || ext === 'doc') {
-      // Use mammoth for docx
-      text = await extractDocxText(file);
-    }
-
-    if (!text || text.trim().length < 50) {
-      alert('Konnte keinen Text aus der Datei lesen. Bitte stelle sicher dass die PDF nicht gescannt/als Bild vorliegt.');
-      document.getElementById('file-info').classList.remove('show');
-      return;
-    }
-
-    uploadedFileContent = { type: 'text', content: text };
-    document.getElementById('file-name-display').textContent = '✓ ' + file.name + ' (' + (file.size/1024).toFixed(0) + ' KB · ' + text.length + ' Zeichen gelesen)';
-
+    if (ext === 'txt') text = await file.text();
+    else if (ext === 'pdf') text = await extractPdfText(file);
+    else text = await extractDocxText(file);
+    if (!text || text.trim().length < 20) { alert('Kein Text lesbar.'); infoEl.classList.remove('show'); return; }
+    if (slot === 'cv') uploadedCV = text;
+    else uploadedNotes = text;
+    nameEl.textContent = 'OK: ' + file.name + ' (' + Math.round(file.size/1024) + ' KB)';
   } catch(err) {
-    alert('Fehler beim Lesen der Datei: ' + err.message);
-    document.getElementById('file-info').classList.remove('show');
+    alert('Fehler: ' + err.message);
+    infoEl.classList.remove('show');
   }
 }
 
-async function extractPdfText(file) {
-  // Load PDF.js from CDN
-  if (!window.pdfjsLib) {
-    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  }
-
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let fullText = '';
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = content.items.map(item => item.str).join(' ');
-    fullText += pageText + '\n';
-  }
-
-  return fullText;
-}
-
-async function extractDocxText(file) {
-  if (!window.mammoth) {
-    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
-  }
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await window.mammoth.extractRawText({ arrayBuffer });
-  return result.value;
-}
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
-
-function removeFile() {
-  uploadedFileContent = null;
-  document.getElementById('file-info').classList.remove('show');
-  document.getElementById('file-input').value = '';
+function removeFile(slot) {
+  if (slot === 'cv') { uploadedCV = null; document.getElementById('file-info-cv').classList.remove('show'); document.getElementById('file-input-cv').value = ''; }
+  else { uploadedNotes = null; document.getElementById('file-info-notes').classList.remove('show'); document.getElementById('file-input-notes').value = ''; }
 }
 
 // ── BUILD PROMPT ──
@@ -1112,20 +1063,109 @@ function buildPrompt() {
   }
 
   if (currentInputMode === 'upload') {
-    const extra = document.getElementById('upload-extra').value;
-    let instruction = '';
-    if (uploadPurpose === 'kandidat') {
-      instruction = `Analysiere das hochgeladene Dokument und erstelle daraus einen professionellen Kandidatenbericht im Signium-Format.\n\nStruktur:\n1. EXECUTIVE SUMMARY (3-4 prägnante Sätze)\n2. BERUFLICHER WERDEGANG\n3. AUSBILDUNG & QUALIFIKATIONEN\n4. KOMPETENZPROFIL\n5. SIGNIUM-EINSCHÄTZUNG & EMPFEHLUNG`;
-    } else if (uploadPurpose === 'pitch') {
-      instruction = `Analysiere diesen Pitch-Brief und extrahiere Stil, Struktur und Tonalität. Beschreibe dann:\n1. Den Aufbau und die Struktur des Briefes\n2. Den Ton und Sprachstil\n3. Die Kernargumente\n4. Erstelle anschließend einen neuen Pitch-Brief im exakt gleichen Stil für einen neuen Kontakt (Platzhalter verwenden).`;
-    } else if (uploadPurpose === 'notizen') {
-      instruction = `Lies die folgenden Notizen/Anweisungen und führe sie aus. Erstelle das gewünschte Dokument im Signium-Stil.`;
+    const position = document.getElementById('upload-position')?.value || '';
+    const klient = document.getElementById('upload-klient')?.value || '';
+    const sprache = document.getElementById('upload-sprache')?.value || 'deutsch';
+    const notesText = document.getElementById('notes-text')?.value || '';
+    const notesContent = uploadedNotes || notesText;
+    const langInstr = sprache === 'englisch' ? 'Write in English.' : 'Schreibe auf Deutsch.';
+
+    if (!uploadedCV) {
+      return { type: 'text', prompt: 'Bitte zuerst einen CV hochladen.' };
     }
-    if (extra) instruction += `\n\nZusätzliche Anweisung: ${extra}`;
-    return { type: 'upload', instruction: baseInstructions + '\n\n' + instruction };
+
+    const signiumFormat = `Du bist Dr. Sami Hamid, Managing Partner bei Signium Austria (Signium – Stein & Partner GmbH), Wien. Du erstellst einen professionellen Vertraulichen Kandidatenbericht im Signium-Format basierend auf dem CV und deinen persönlichen Gesprächsnotizen.
+
+${langInstr}
+
+Ton: Substanziell, präzise, auf Augenhöhe mit Geschäftsführern und Vorständen. Berater-Perspektive — nicht CV-Zusammenfassung. Keine generischen Floskeln.
+
+Erstelle den Bericht in diesem exakten Format:
+
+VERTRAULICHER BERICHT
+[NAME]
+[POSITION / ROLLE]${klient ? '
+' + klient : ''}
+[Datum: ${new Date().toLocaleDateString('de-AT', {month: 'long', year: 'numeric'})}]
+
+---
+
+PERSÖNLICHE DATEN
+
+Name: [vollständiger Name]
+Geburtsdaten: [wenn vorhanden]
+Wohnort: [Stadt, Land]
+Nationalität: [Nationalität]
+Familienstand: [wenn vorhanden]
+Sprachen: [Muttersprache / Fließend / Grundkenntnisse]
+
+---
+
+AUSBILDUNG
+
+[Chronologisch — Institution, Abschluss, Jahr]
+
+---
+
+VERGÜTUNG & VERFÜGBARKEIT
+
+Aktuelles Fixgehalt: [wenn bekannt, sonst: nicht besprochen]
+Bonus/Variable: [wenn bekannt]
+Kündigungsfrist: [wenn bekannt]
+Umzugsbereitschaft: [Ja/Nein/nicht besprochen]
+Reisebereitschaft: [wenn bekannt]
+
+---
+
+BERUFLICHER WERDEGANG
+
+[Chronologisch, neueste zuerst. Für jede Position:]
+[Zeitraum] | [Unternehmen, Ort]
+[Jobtitel]
+[Kurze Firmenbeschreibung in Kursiv — 1 Satz]
+Hauptverantwortlichkeiten:
+• [5-7 konkrete Verantwortlichkeiten]
+Key Achievements:
+• [3-5 messbare Erfolge]
+
+---
+
+ANMERKUNGEN ZUM WERDEGANG
+
+ZUSAMMENFASSUNG
+[3-4 substanzielle Absätze aus Berater-Perspektive über Karriere, Expertise und Profil]
+
+AUSBILDUNG & AKADEMISCHER HINTERGRUND
+[Bewertung der akademischen Qualifikationen]
+
+BERUFLICH-FACHLICHE EIGNUNG${position ? ' FÜR ' + position.toUpperCase() : ''}
+[Konkrete Bewertung der fachlichen Eignung — Stärken, Branchenerfahrung, relevante Kompetenzen]
+
+MOTIVATION
+${notesContent ? '[Basierend auf den Notizen]' : '[Basierend auf persönlichem Gespräch — bitte ergänzen]'}
+
+PERSÖNLICHKEIT
+${notesContent ? '[Basierend auf den Notizen]' : '[Basierend auf persönlichem Gespräch — bitte ergänzen]'}
+
+EMPFEHLUNG
+${notesContent ? '[Basierend auf den Notizen und Eignung]' : '[Empfehlung basierend auf Eignung — bitte ergänzen]'}
+
+---
+
+CV-INHALT:
+${uploadedCV}
+${notesContent ? '
+---
+
+GESPRÄCHSNOTIZEN UND PERSÖNLICHE EINDRÜCKE:
+' + notesContent : ''}
+
+Wichtig: Lass jeden Abschnitt komplett weg, zu dem du keine ausreichenden Informationen hast. Kein Platzhalter, keine leeren Felder, kein Hinweis dass etwas fehlt — einfach weglassen. Schreibe nur was du wirklich weißt.`;
+
+    return { type: 'text', prompt: signiumFormat };
   }
 
-  if (currentInputMode === 'url') {
+    if (currentInputMode === 'url') {
     const url = document.getElementById('linkedin-url').value;
     const content = document.getElementById('linkedin-content').value;
     return { type: 'text', prompt: `${baseInstructions}\n\nGeneriere einen strukturierten Kandidatenbericht basierend auf folgendem LinkedIn-Profil:\n\nURL: ${url}\n\nProfil-Inhalt:\n${content}\n\nStruktur:\n1. EXECUTIVE SUMMARY\n2. BERUFLICHER WERDEGANG\n3. AUSBILDUNG\n4. KOMPETENZPROFIL\n5. SIGNIUM-EINSCHÄTZUNG` };
@@ -1162,8 +1202,8 @@ async function generateDocument() {
   const outputContent = document.getElementById('output-content');
 
   // Validate upload mode
-  if (currentInputMode === 'upload' && !uploadedFileContent) {
-    alert('Bitte zuerst eine Datei hochladen.');
+  if (currentInputMode === 'upload' && !uploadedCV) {
+    alert('Bitte zuerst einen CV hochladen.');
     return;
   }
 
@@ -1177,9 +1217,8 @@ async function generateDocument() {
   try {
     let messages;
 
-    if (currentInputMode === 'upload' && uploadedFileContent) {
-      const uploadInstruction = promptData.instruction;
-      messages = [{ role: 'user', content: uploadInstruction + '\n\n---\n\nDOKUMENT-INHALT:\n\n' + uploadedFileContent.content }];
+    if (currentInputMode === 'upload') {
+      messages = [{ role: 'user', content: promptData.prompt }];
     } else {
       messages = [{ role: 'user', content: promptData.prompt }];
     }
