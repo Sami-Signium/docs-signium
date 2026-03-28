@@ -1074,93 +1074,12 @@ function buildPrompt() {
       return { type: 'text', prompt: 'Bitte zuerst einen CV hochladen.' };
     }
 
-    const signiumFormat = `Du bist Dr. Sami Hamid, Managing Partner bei Signium Austria (Signium – Stein & Partner GmbH), Wien. Du erstellst einen professionellen Vertraulichen Kandidatenbericht im Signium-Format basierend auf dem CV und deinen persönlichen Gesprächsnotizen.
+    const notesSection = notesContent ? '\n\n---\n\nGESPRACHSNOTIZEN UND PERSONLICHE EINDRCKE:\n' + notesContent : '';
+    const positionLine = position ? ' FUR ' + position.toUpperCase() : '';
+    const klientLine = klient ? '\nKlient: ' + klient : '';
+    const langInstr = sprache === 'englisch' ? 'Write the report in English.' : 'Schreibe den Bericht auf Deutsch.';
 
-${langInstr}
-
-Ton: Substanziell, präzise, auf Augenhöhe mit Geschäftsführern und Vorständen. Berater-Perspektive — nicht CV-Zusammenfassung. Keine generischen Floskeln.
-
-Erstelle den Bericht in diesem exakten Format:
-
-VERTRAULICHER BERICHT
-[NAME]
-[POSITION / ROLLE]${klient ? '
-' + klient : ''}
-[Datum: ${new Date().toLocaleDateString('de-AT', {month: 'long', year: 'numeric'})}]
-
----
-
-PERSÖNLICHE DATEN
-
-Name: [vollständiger Name]
-Geburtsdaten: [wenn vorhanden]
-Wohnort: [Stadt, Land]
-Nationalität: [Nationalität]
-Familienstand: [wenn vorhanden]
-Sprachen: [Muttersprache / Fließend / Grundkenntnisse]
-
----
-
-AUSBILDUNG
-
-[Chronologisch — Institution, Abschluss, Jahr]
-
----
-
-VERGÜTUNG & VERFÜGBARKEIT
-
-Aktuelles Fixgehalt: [wenn bekannt, sonst: nicht besprochen]
-Bonus/Variable: [wenn bekannt]
-Kündigungsfrist: [wenn bekannt]
-Umzugsbereitschaft: [Ja/Nein/nicht besprochen]
-Reisebereitschaft: [wenn bekannt]
-
----
-
-BERUFLICHER WERDEGANG
-
-[Chronologisch, neueste zuerst. Für jede Position:]
-[Zeitraum] | [Unternehmen, Ort]
-[Jobtitel]
-[Kurze Firmenbeschreibung in Kursiv — 1 Satz]
-Hauptverantwortlichkeiten:
-• [5-7 konkrete Verantwortlichkeiten]
-Key Achievements:
-• [3-5 messbare Erfolge]
-
----
-
-ANMERKUNGEN ZUM WERDEGANG
-
-ZUSAMMENFASSUNG
-[3-4 substanzielle Absätze aus Berater-Perspektive über Karriere, Expertise und Profil]
-
-AUSBILDUNG & AKADEMISCHER HINTERGRUND
-[Bewertung der akademischen Qualifikationen]
-
-BERUFLICH-FACHLICHE EIGNUNG${position ? ' FÜR ' + position.toUpperCase() : ''}
-[Konkrete Bewertung der fachlichen Eignung — Stärken, Branchenerfahrung, relevante Kompetenzen]
-
-MOTIVATION
-${notesContent ? '[Basierend auf den Notizen]' : '[Basierend auf persönlichem Gespräch — bitte ergänzen]'}
-
-PERSÖNLICHKEIT
-${notesContent ? '[Basierend auf den Notizen]' : '[Basierend auf persönlichem Gespräch — bitte ergänzen]'}
-
-EMPFEHLUNG
-${notesContent ? '[Basierend auf den Notizen und Eignung]' : '[Empfehlung basierend auf Eignung — bitte ergänzen]'}
-
----
-
-CV-INHALT:
-${uploadedCV}
-${notesContent ? '
----
-
-GESPRÄCHSNOTIZEN UND PERSÖNLICHE EINDRÜCKE:
-' + notesContent : ''}
-
-Wichtig: Lass jeden Abschnitt komplett weg, zu dem du keine ausreichenden Informationen hast. Kein Platzhalter, keine leeren Felder, kein Hinweis dass etwas fehlt — einfach weglassen. Schreibe nur was du wirklich weißt.`;
+    const signiumFormat = 'Du bist Dr. Sami Hamid, Managing Partner bei Signium Austria. Erstelle einen professionellen Vertraulichen Kandidatenbericht im Signium-Format.\n\n' + langInstr + '\n\nTon: Substanziell, praezise, Berater-Perspektive.\n\nWICHTIG: Lass jeden Abschnitt komplett weg zu dem du keine Informationen hast. Kein Platzhalter, keine leeren Felder - einfach weglassen.\n\nFormat:\n\nVERTRAULICHER BERICHT\n[NAME]\n[POSITION]' + klientLine + '\n[Monat Jahr]\n\nPERSONLICHE DATEN\n[Name, Geburtsdatum wenn vorhanden, Wohnort, Nationalitat, Familienstand wenn vorhanden, Sprachen]\n\nAUSBILDUNG\n[Chronologisch - Institution, Abschluss, Jahr]\n\nVERGUTUNG & VERFUGBARKEIT\n[Nur wenn Informationen vorhanden: Fixgehalt, Bonus, Kundigungsfrist, Umzugsbereitschaft]\n\nBERUFLICHER WERDEGANG\n[Fur jede Position: Zeitraum, Unternehmen, Jobtitel, kurze Firmenbeschreibung, Hauptverantwortlichkeiten als Bullets, Key Achievements als Bullets]\n\nANMERKUNGEN ZUM WERDEGANG\n\nZUSAMMENFASSUNG\n[3-4 Paragraphen aus Berater-Perspektive]\n\nBERUFLICH-FACHLICHE EIGNUNG' + positionLine + '\n[Konkrete Bewertung Starken und Eignung]\n\nMOTIVATION\n[Nur wenn in Notizen vorhanden]\n\nPERSONLICHKEIT\n[Nur wenn in Notizen vorhanden]\n\nEMPFEHLUNG\n[Nur wenn genugende Infos vorhanden]\n\n---\n\nCV-INHALT:\n' + uploadedCV + notesSection
 
     return { type: 'text', prompt: signiumFormat };
   }
