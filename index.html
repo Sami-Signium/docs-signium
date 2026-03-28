@@ -1021,35 +1021,77 @@ async function processFile(file) {
   const maxSize = 10 * 1024 * 1024;
   if (file.size > maxSize) { alert('Datei zu groß (max. 10 MB).'); return; }
 
-  const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/msword', 'text/plain'];
   const ext = file.name.split('.').pop().toLowerCase();
-  const allowed = allowedTypes.includes(file.type) || ['pdf','docx','doc','txt'].includes(ext);
+  const allowed = ['pdf','docx','doc','txt'].includes(ext);
   if (!allowed) { alert('Nur PDF, Word (.docx) und Text-Dateien erlaubt.'); return; }
 
-  document.getElementById('file-name-display').textContent = file.name + ' (' + (file.size/1024).toFixed(0) + ' KB)';
+  document.getElementById('file-name-display').textContent = '⏳ Wird gelesen... ' + file.name;
   document.getElementById('file-info').classList.add('show');
 
-  if (file.type === 'text/plain' || ext === 'txt') {
-    uploadedFileContent = { type: 'text', content: await file.text() };
-  } else if (file.type === 'application/pdf' || ext === 'pdf') {
-    // Read as base64 for Claude API
-    const base64 = await fileToBase64(file);
-    uploadedFileContent = { type: 'pdf', base64, name: file.name };
-  } else if (ext === 'docx' || ext === 'doc') {
-    // For docx: extract text using mammoth-like approach via reading as arraybuffer
-    // Since we can't use mammoth here, we'll read as base64 and send as document
-    const base64 = await fileToBase64(file);
-    uploadedFileContent = { type: 'docx', base64, name: file.name };
+  try {
+    let text = '';
+
+    if (ext === 'txt') {
+      text = await file.text();
+    } else if (ext === 'pdf') {
+      text = await extractPdfText(file);
+    } else if (ext === 'docx' || ext === 'doc') {
+      // Use mammoth for docx
+      text = await extractDocxText(file);
+    }
+
+    if (!text || text.trim().length < 50) {
+      alert('Konnte keinen Text aus der Datei lesen. Bitte stelle sicher dass die PDF nicht gescannt/als Bild vorliegt.');
+      document.getElementById('file-info').classList.remove('show');
+      return;
+    }
+
+    uploadedFileContent = { type: 'text', content: text };
+    document.getElementById('file-name-display').textContent = '✓ ' + file.name + ' (' + (file.size/1024).toFixed(0) + ' KB · ' + text.length + ' Zeichen gelesen)';
+
+  } catch(err) {
+    alert('Fehler beim Lesen der Datei: ' + err.message);
+    document.getElementById('file-info').classList.remove('show');
   }
 }
 
-function fileToBase64(file) {
+async function extractPdfText(file) {
+  // Load PDF.js from CDN
+  if (!window.pdfjsLib) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(item => item.str).join(' ');
+    fullText += pageText + '\n';
+  }
+
+  return fullText;
+}
+
+async function extractDocxText(file) {
+  if (!window.mammoth) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await window.mammoth.extractRawText({ arrayBuffer });
+  return result.value;
+}
+
+function loadScript(src) {
   return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result.split(',')[1]);
-    r.onerror = reject;
-    r.readAsDataURL(file);
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
   });
 }
 
@@ -1136,25 +1178,8 @@ async function generateDocument() {
     let messages;
 
     if (currentInputMode === 'upload' && uploadedFileContent) {
-      const { type, base64, content, instruction } = uploadedFileContent;
-
       const uploadInstruction = promptData.instruction;
-      if (type === 'text') {
-        messages = [{ role: 'user', content: uploadInstruction + '\n\n---\n\n' + uploadedFileContent.content }];
-      } else if (type === 'pdf') {
-        messages = [{
-          role: 'user',
-          content: [
-            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: uploadedFileContent.base64 } },
-            { type: 'text', text: uploadInstruction }
-          ]
-        }];
-      } else if (type === 'docx') {
-        messages = [{
-          role: 'user',
-          content: uploadInstruction + '\n\nHinweis: Die hochgeladene Word-Datei konnte nicht direkt gelesen werden. Bitte speichere sie als PDF und lade sie erneut hoch — oder kopiere den Text ins Freitext-Feld.'
-        }];
-      }
+      messages = [{ role: 'user', content: uploadInstruction + '\n\n---\n\nDOKUMENT-INHALT:\n\n' + uploadedFileContent.content }];
     } else {
       messages = [{ role: 'user', content: promptData.prompt }];
     }
