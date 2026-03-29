@@ -745,7 +745,8 @@
         <div class="output-label">Generiertes Dokument</div>
         <div class="output-actions">
           <button class="action-btn" onclick="copyToClipboard()">Kopieren</button>
-          <button class="action-btn primary" onclick="downloadTxt()">Download .txt</button>
+          <button class="action-btn" onclick="downloadTxt()">Download .txt</button>
+          <button class="action-btn primary" onclick="downloadDocx()">Download Word</button>
         </div>
       </div>
       <div class="output-body">
@@ -1113,18 +1114,96 @@ function buildPrompt() {
     const klientLine = klient ? '\nKlient: ' + klient : '';
     const langInstr = sprache === 'englisch' ? 'Write the report in English.' : 'Schreibe den Bericht auf Deutsch.';
 
-    const signiumFormat = langInstr + '\n\nDu bist Dr. Sami Hamid, Managing Partner Signium Austria. Erstelle einen VERTRAULICHEN KANDIDATENBERICHT im Signium-Format.\n\nDER BERICHT IST KEIN CV. Er ist eine professionelle Berater-Einschaetzung fuer den Klienten. Schreibe substanziell, praezise, auf Augenhoehe mit Vorstaenden.\n\nFORMAT-REGELN:\n- Keine Markdown-Symbole wie ## oder ** oder *\n- Abschnittstitel in GROSSBUCHSTABEN\n- Unterabschnitte mit normaler Schrift\n- Firmenname und Jobtitel fett mit Doppelpunkt\n- Aufzaehlungen mit Bindestrich\n- Lass Abschnitte ohne Information komplett weg\n\n' +
-    'TEIL 1 - FAKTISCHER TEIL (aus dem CV):\n\n' +
-    'PERSOENLICHE DATEN\n(Name, Geburtsdatum, Wohnort, Nationalitaet, Familienstand, Sprachen - nur was vorhanden)\n\n' +
-    'AUSBILDUNG\n(Chronologisch - Institution, Abschluss, Jahr)\n\n' +
-    (notesContent && notesContent.includes('gehalt') || notesContent && notesContent.includes('Gehalt') || notesContent && notesContent.includes('salary') ? 'VERGUETUNG & VERFUEGBARKEIT\n(Nur wenn in Notizen erwaehnt)\n\n' : '') +
-    'BERUFLICHER WERDEGANG\n(Fuer jede Position EXAKT so strukturieren:\nZEITRAUM | UNTERNEHMEN, ORT\nJobtitel\nUnternehmensbeschreibung in Kursiv - 1 praegnanter Satz\nHauptverantwortlichkeiten:\n- [konkrete Verantwortung]\n- [konkrete Verantwortung]\nKey Achievements:\n- [messbarer Erfolg]\n- [messbarer Erfolg])\n\n' +
-    'TEIL 2 - BEWERTUNGSTEIL (aus Berater-Perspektive):\n\n' +
-    'ANMERKUNGEN ZUM WERDEGANG\n\n' +
-    'ZUSAMMENFASSUNG\n(3-4 Paragraphen: Wer ist diese Person? Was macht sie besonders? Welche Karriere-Logik steckt dahinter? Berater-Sprache, nicht CV-Sprache.)\n\n' +
-    'BERUFLICH-FACHLICHE EIGNUNG' + positionLine + '\n(Konkrete Eignung fuer die Zielrolle - Staerken, relevante Erfahrungen, Luecken)\n\n' +
-    (notesContent ? 'MOTIVATION\n(Aus den Notizen: Warum ist die Person offen fuer einen Wechsel?)\n\nPERSONLICHKEIT\n(Aus den Notizen: Fuehrungsstil, Kommunikation, Eindruck im Gespraech)\n\nEMPFEHLUNG\n(Klare Empfehlung des Beraters)\n' : '') +
-    '\n---\n\nCV-INHALT:\n' + uploadedCV + notesSection
+    const datum = new Date().toLocaleDateString('de-AT', {month: 'long', year: 'numeric'});
+    const signiumFormat = langInstr + `
+
+Du bist Dr. Sami Hamid, Managing Partner Signium Austria. Erstelle einen professionellen VERTRAULICHEN KANDIDATENBERICHT im exakten Signium-Format.
+
+WICHTIG: Kein Markdown. Keine ## Symbole. Abschnittstitel in GROSSBUCHSTABEN. Lass Abschnitte ohne Information komplett weg.
+
+Erstelle den Bericht in EXAKT dieser Struktur:
+
+[NAME DES KANDIDATEN]
+VERTRAULICHER KANDIDATENBERICHT
+[POSITION / ROLLE]${position ? '\n' + position : ''}${klient ? '\n' + klient : ''}
+${datum}
+
+Dieser Vertrauliche Bericht enthält zum Teil Informationen, die uns unter Zusicherung strengster Vertraulichkeit mitgeteilt wurden. Entsprechend unseren berufsethischen Prinzipien müssen wir Sie dazu verpflichten, nur einer begrenzten Auswahl von Personen, die sich direkt mit der Auswertung befassen, Einsicht in diese Berichte zu gewähren. Der Inhalt muss auch jeglichen Drittpersonen gegenüber geheim gehalten werden. Es dürfen keinerlei Referenzen ohne Zustimmung des Kandidaten oder unsererseits eingeholt werden.
+
+---
+
+PERSÖNLICHE ANGABEN
+
+Name: [vollständiger Name]
+Geburtsdatum: [wenn vorhanden]
+Wohnort: [wenn vorhanden]
+Nationalität: [wenn vorhanden]
+Familienstand: [wenn vorhanden]
+Sprachen: [Muttersprache / Fließend / Grundkenntnisse]
+
+---
+
+AUSBILDUNG UND QUALIFIKATIONEN
+
+[Chronologisch: Institution, Abschluss, Jahr]
+
+---
+
+VERGÜTUNG UND VERFÜGBARKEIT
+
+[Nur wenn Informationen vorhanden aus Notizen:]
+Aktuelles Paket (nach Angaben des Kandidaten)
+Fixgehalt: [Betrag]
+Bonus: [Betrag oder Beschreibung]
+
+Erwartetes Paket: [wenn vorhanden]
+Kündigungsfrist: [wenn vorhanden]
+Umsiedlung: [wenn vorhanden]
+Verfügbarkeit für Reisen: [wenn vorhanden]
+
+---
+
+KARRIERE ZUSAMMENFASSUNG
+
+[Chronologisch, neueste zuerst - Format: Zeitraum | Unternehmen, Ort | Jobtitel]
+
+---
+
+KANDIDATENBEWERTUNG
+
+FACHLICHES RESÜMEE
+[3-4 substanzielle Paragraphen aus Berater-Perspektive: Wer ist diese Person, was macht sie besonders, welche Karriere-Logik, konkrete Leistungen und Zahlen]
+
+BEWERTUNG
+[Persönlichkeit, Führungsstil, Kommunikation - aus Notizen oder aus Karrieremuster abgeleitet]
+
+BEWERBERMOTIVATION
+[Warum ist der Kandidat offen für einen Wechsel - nur wenn in Notizen vorhanden]
+
+---
+
+BERUFSERFAHRUNG
+
+[Für jede relevante Position:]
+[Zeitraum] | [UNTERNEHMEN, Ort]
+[Jobtitel]
+[Kurze Firmenbeschreibung - 1 Satz in Kursiv]
+Hauptverantwortlichkeiten:
+- [konkrete Verantwortlichkeit]
+- [konkrete Verantwortlichkeit]
+Key Achievements:
+- [messbarer Erfolg mit Zahlen wenn möglich]
+- [messbarer Erfolg]
+
+---
+
+Vorbereitet von: Dr. Sami Hamid | Managing Partner | Signium Austria
+t +43 664 4568862 | sami.hamid@signium.com
+
+---
+
+CV-INHALT:
+${uploadedCV}${notesContent ? '\n\nGESPRÄCHSNOTIZEN:\n' + notesContent : ''}`;
 
     return { type: 'text', prompt: signiumFormat };
   }
@@ -1225,6 +1304,34 @@ function copyToClipboard() {
     btn.textContent = 'Kopiert ✓';
     setTimeout(() => btn.textContent = 'Kopieren', 2000);
   });
+}
+
+async function downloadDocx() {
+  if (!generatedText) return;
+  try {
+    const btn = event.target;
+    btn.textContent = 'Wird erstellt...';
+    btn.disabled = true;
+    const response = await fetch('/api/generate-docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: generatedText })
+    });
+    if (!response.ok) throw new Error('Fehler beim Erstellen');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Signium_Kandidatenbericht.docx';
+    a.click();
+    URL.revokeObjectURL(url);
+    btn.textContent = 'Download Word';
+    btn.disabled = false;
+  } catch(err) {
+    alert('Fehler: ' + err.message);
+    event.target.textContent = 'Download Word';
+    event.target.disabled = false;
+  }
 }
 
 function downloadTxt() {
