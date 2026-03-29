@@ -146,7 +146,7 @@ const SECTION_KEYS = [
 function needsPageBreak(key) {
   const u = key.toUpperCase();
   if (u.includes('PERS') && (u.includes('NLICH') || u.includes('ONAL'))) return true;
-  if (u.includes('AUSBILDUNG') || u.includes('EDUCATION')) return true;
+  // AUSBILDUNG bleibt auf der gleichen Seite wie PERSÖNLICHE ANGABEN
   if (u.includes('VERG') || u.includes('COMPENSATION')) return true;
   if (u.includes('KARRIERE') || u.includes('CAREER')) return true;
   if (u.includes('FACHLICH') || u.includes('PROFESSIONAL SUMMARY')) return true;
@@ -230,28 +230,43 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
       continue;
     }
 
-    // VERGÜTUNG
+    // VERGÜTUNG — Label [tab] Wert, bold label
     if (isVergütung) {
       for (const line of content) {
         if (line.includes(':')) {
           const idx = line.indexOf(':');
           const label = line.slice(0, idx).trim();
           const value = line.slice(idx + 1).trim();
-          parts.push(`<w:p><w:pPr><w:spacing w:before="160" w:after="160"/></w:pPr>
-            ${run(label + ': ', { bold: true, sz: 22, color: '414042' })}
-            ${run(value, { sz: 22, color: '262626' })}</w:p>`);
+          const labelRpr = rpr({ bold: true, sz: 22, color: '414042' });
+          const valueRpr = rpr({ sz: 22, color: '262626' });
+          parts.push(`<w:p><w:pPr><w:spacing w:before="140" w:after="140"/></w:pPr>
+            <w:r>${labelRpr}<w:t>${xe(label)}</w:t><w:tab/><w:tab/><w:tab/><w:tab/></w:r>
+            <w:r>${valueRpr}<w:t xml:space="preserve">${xe(value)}</w:t></w:r>
+          </w:p>`);
         } else {
-          parts.push(np(line, 160, 160, { bold: true, sz: 22 }));
+          parts.push(np(line, 140, 140, { bold: true, sz: 22 }));
         }
       }
       parts.push(np('', 120));
       continue;
     }
 
-    // KARRIERE
+    // KARRIERE — Datum [tab] Firma [tab] Titel
     if (isKarriere) {
       for (const line of content) {
-        parts.push(np(line, 120, 160, { bold: true, sz: 22, color: '262626' }));
+        const pipeParts = line.split('|').map(s => s.trim());
+        if (pipeParts.length >= 2) {
+          const dateRpr = rpr({ sz: 22, color: '414042' });
+          const compRpr = rpr({ bold: true, sz: 22, color: '262626' });
+          const titleRpr = rpr({ sz: 22, color: '262626' });
+          parts.push(`<w:p><w:pPr><w:spacing w:before="120" w:after="120"/></w:pPr>
+            <w:r>${dateRpr}<w:t>${xe(pipeParts[0])}</w:t><w:tab/><w:tab/></w:r>
+            <w:r>${compRpr}<w:t xml:space="preserve">${xe(pipeParts[1])}</w:t></w:r>
+            ${pipeParts[2] ? `<w:r>${titleRpr}<w:t xml:space="preserve">  |  ${xe(pipeParts[2])}</w:t></w:r>` : ''}
+          </w:p>`);
+        } else {
+          parts.push(np(line, 120, 120, { bold: true, sz: 22, color: '262626' }));
+        }
       }
       parts.push(np('', 120));
       continue;
