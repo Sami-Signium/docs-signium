@@ -1113,7 +1113,7 @@ function buildPrompt() {
     const klientLine = klient ? '\nKlient: ' + klient : '';
     const langInstr = sprache === 'englisch' ? 'Write the report in English.' : 'Schreibe den Bericht auf Deutsch.';
 
-    const signiumFormat = langInstr + '\n\nDu bist Dr. Sami Hamid, Managing Partner Signium Austria. Erstelle einen VERTRAULICHEN KANDIDATENBERICHT im Signium-Format.\n\nDER BERICHT IST KEIN CV. Er ist eine professionelle Berater-Einschaetzung fuer den Klienten. Schreibe substanziell, praezise, auf Augenhoehe mit Vorstaenden.\n\nWICHTIG: Lass Abschnitte ohne Information komplett weg.\n\n' +
+    const signiumFormat = langInstr + '\n\nDu bist Dr. Sami Hamid, Managing Partner Signium Austria. Erstelle einen VERTRAULICHEN KANDIDATENBERICHT im Signium-Format.\n\nDER BERICHT IST KEIN CV. Er ist eine professionelle Berater-Einschaetzung fuer den Klienten. Schreibe substanziell, praezise, auf Augenhoehe mit Vorstaenden.\n\nFORMAT-REGELN:\n- Keine Markdown-Symbole wie ## oder ** oder *\n- Abschnittstitel in GROSSBUCHSTABEN\n- Unterabschnitte mit normaler Schrift\n- Firmenname und Jobtitel fett mit Doppelpunkt\n- Aufzaehlungen mit Bindestrich\n- Lass Abschnitte ohne Information komplett weg\n\n' +
     'TEIL 1 - FAKTISCHER TEIL (aus dem CV):\n\n' +
     'PERSOENLICHE DATEN\n(Name, Geburtsdatum, Wohnort, Nationalitaet, Familienstand, Sprachen - nur was vorhanden)\n\n' +
     'AUSBILDUNG\n(Chronologisch - Institution, Abschluss, Jahr)\n\n' +
