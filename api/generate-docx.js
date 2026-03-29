@@ -9,6 +9,38 @@ function xe(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Theme font rPr — matches exactly what revised doc uses
+// minorHAnsi = Calibri Light, majorHAnsi = Calibri
+function rpr(opts) {
+  opts = opts || {};
+  let x = '<w:rPr>';
+  // Font: use theme fonts exactly like revised doc
+  if (opts.major) {
+    x += '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>';
+  } else {
+    x += '<w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi" w:cstheme="minorHAnsi"/>';
+  }
+  if (opts.bold) x += '<w:b/>';
+  if (opts.italic) x += '<w:i/>';
+  // Color: explicit dark gray unless specified
+  const color = opts.color || '414042';
+  x += `<w:color w:val="${color}"/>`;
+  const sz = opts.sz || 22;
+  x += `<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`;
+  x += '</w:rPr>';
+  return x;
+}
+
+// Run element
+function run(text, opts) {
+  return `<w:r>${rpr(opts)}<w:t xml:space="preserve">${xe(text)}</w:t></w:r>`;
+}
+
+// Tab run
+function tabrun(opts) {
+  return `<w:r>${rpr(opts)}<w:tab/></w:r>`;
+}
+
 // Named style paragraph
 function sp(styleId, text, before, after, opts) {
   opts = opts || {};
@@ -19,15 +51,13 @@ function sp(styleId, text, before, after, opts) {
     const a = after !== undefined ? ` w:after="${after}"` : '';
     ppr += `<w:spacing${b}${a}/>`;
   }
+  // pPr rPr to override style defaults
+  ppr += rpr(opts).replace('<w:rPr>', '<w:rPr>'); // same rpr in pPr
   if (!text && text !== 0) return `<w:p><w:pPr>${ppr}</w:pPr></w:p>`;
-  let rpr = `<w:rPr><w:color w:val="auto"/>`;
-  if (opts.bold) rpr += '<w:b/>';
-  if (opts.sz) rpr += `<w:sz w:val="${opts.sz}"/><w:szCs w:val="${opts.sz}"/>`;
-  rpr += '</w:rPr>';
-  return `<w:p><w:pPr>${ppr}</w:pPr><w:r>${rpr}<w:t xml:space="preserve">${xe(text)}</w:t></w:r></w:p>`;
+  return `<w:p><w:pPr>${ppr}</w:pPr>${run(text, opts)}</w:p>`;
 }
 
-// Normal paragraph
+// Normal paragraph (no named style)  
 function np(text, before, after, opts) {
   opts = opts || {};
   let ppr = '';
@@ -37,31 +67,67 @@ function np(text, before, after, opts) {
     ppr += `<w:spacing${b}${a}/>`;
   }
   if (opts.jc) ppr += `<w:jc w:val="${opts.jc}"/>`;
-  let rpr = `<w:rPr>`;
-  if (opts.bold) rpr += '<w:b/>';
-  if (opts.italic) rpr += '<w:i/>';
-  // Always explicit color - auto = black, no petrol
-  const color = opts.color || 'auto';
-  rpr += `<w:color w:val="${color}"/>`;
-  const sz = opts.sz || 22;
-  rpr += `<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`;
-  rpr += '</w:rPr>';
   if (!text && text !== 0) return `<w:p><w:pPr>${ppr}</w:pPr></w:p>`;
-  return `<w:p><w:pPr>${ppr}</w:pPr><w:r>${rpr}<w:t xml:space="preserve">${xe(text)}</w:t></w:r></w:p>`;
+  return `<w:p><w:pPr>${ppr}</w:pPr>${run(text, opts)}</w:p>`;
 }
 
 // Personal details row: Label [4 tabs] Value — exact structure from revised doc
 function personalRow(label, value) {
+  const labelRpr = rpr({ sz: 22, color: '414042' });
+  const valueRpr = rpr({ sz: 22, color: '262626' });
   return `<w:p>
-    <w:pPr><w:pStyle w:val="SPTBodytext66"/></w:pPr>
-    <w:r><w:rPr><w:color w:val="auto"/></w:rPr><w:t>${xe(label)}</w:t><w:tab/><w:tab/><w:tab/><w:tab/></w:r>
-    <w:r><w:rPr><w:color w:val="262626"/></w:rPr><w:t xml:space="preserve">${xe(value)}</w:t></w:r>
+    <w:pPr><w:pStyle w:val="SPTBodytext66"/>${rpr({ sz: 22 })}</w:pPr>
+    <w:r>${labelRpr}<w:t>${xe(label)}</w:t><w:tab/><w:tab/><w:tab/><w:tab/></w:r>
+    <w:r>${valueRpr}<w:t xml:space="preserve">${xe(value)}</w:t></w:r>
   </w:p>`;
 }
 
-// Horizontal rule
+// Horizontal rule — thin gray line
 function hr() {
-  return np('________________________________________________________________________________', 60, 60, { color: 'AAAAAA', sz: 16 });
+  return np('________________________________________________________________________________', 60, 60, { color: 'CCCCCC', sz: 16 });
+}
+
+// Listenabsatz bullet — exact structure from revised doc (with numPr)
+function bullet(text, before, after) {
+  const spacing = `<w:spacing w:before="${before||60}" w:after="${after||120}"/>`;
+  const r = rpr({ sz: 24, color: '262626' });
+  return `<w:p>
+    <w:pPr>
+      <w:pStyle w:val="Listenabsatz"/>
+      <w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>
+      ${spacing}
+      ${rpr({ sz: 24, color: '262626' })}
+    </w:pPr>
+    <w:r>${r}<w:t xml:space="preserve">${xe(text)}</w:t></w:r>
+  </w:p>`;
+}
+
+// Company header: "Date: Company" — date auto color, company bold larger
+function companyHeader(datePart, companyPart, before, after) {
+  const dateRpr = rpr({ sz: 22, color: '414042' });
+  const companyRpr = rpr({ sz: 28, color: '262626', bold: true });
+  let ppr = `<w:pStyle w:val="Amrop-header"/>`;
+  ppr += `<w:spacing w:before="${before||120}" w:after="${after||120}"/>`;
+  ppr += rpr({ sz: 22, color: '414042' }); // pPr rPr override petrol
+  if (companyPart) {
+    return `<w:p><w:pPr>${ppr}</w:pPr>
+      <w:r>${dateRpr}<w:t xml:space="preserve">${xe(datePart)}: </w:t><w:tab/></w:r>
+      <w:r>${companyRpr}<w:t xml:space="preserve">${xe(companyPart)}</w:t></w:r>
+    </w:p>`;
+  }
+  return `<w:p><w:pPr>${ppr}</w:pPr>
+    <w:r>${dateRpr}<w:t xml:space="preserve">${xe(datePart)}</w:t></w:r>
+  </w:p>`;
+}
+
+// Section heading
+function sectionHead(text, pageBreak) {
+  let ppr = `<w:pStyle w:val="berschrift2"/>`;
+  if (pageBreak) ppr += `<w:pageBreakBefore/>`;
+  ppr += `<w:spacing w:before="120"/>`;
+  const r = rpr({ major: true, bold: true, sz: 28, color: '102E66' });
+  ppr += r; // override in pPr too
+  return `<w:p><w:pPr>${ppr}</w:pPr><w:r>${r}<w:t xml:space="preserve">${xe(text)}</w:t></w:r></w:p>`;
 }
 
 const SECTION_KEYS = [
@@ -77,15 +143,9 @@ const SECTION_KEYS = [
   'ANMERKUNGEN ZUM WERDEGANG'
 ];
 
-const SUB_KEYS = [
-  'FACHLICHES RESÜMEE','FACHLICHES RESUME','PROFESSIONAL SUMMARY',
-  'BEWERTUNG','PERSONALITY','PERSÖNLICHKEIT',
-  'BEWERBERMOTIVATION','MOTIVATION','KANDIDATENMOTIVATION'
-];
-
 function needsPageBreak(key) {
   const u = key.toUpperCase();
-  if (u.includes('PERS') && (u.includes('NLICHE') || u.includes('NLICH') || u.includes('ONAL'))) return true;
+  if (u.includes('PERS') && (u.includes('NLICH') || u.includes('ONAL'))) return true;
   if (u.includes('AUSBILDUNG') || u.includes('EDUCATION')) return true;
   if (u.includes('VERG') || u.includes('COMPENSATION')) return true;
   if (u.includes('KARRIERE') || u.includes('CAREER')) return true;
@@ -119,11 +179,21 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
   const parts = [];
 
   // ── COVER ──
-  parts.push(sp('Titleheader', (candidateName || 'KANDIDAT').toUpperCase(), 120, 0));
-  parts.push(sp('Coverdoctitle', 'VERTRAULICHER KANDIDATENBERICHT', 4080, 0, { sz: 32 }));
-  if (position) parts.push(sp('Coverdate', position.toUpperCase(), 720, 1000, { bold: true, sz: 28 }));
-  if (client && client !== 'Vertraulich') parts.push(sp('Coverdate', client, 120, 120, { bold: true, sz: 32 }));
-  parts.push(sp('Coverdate', datum || '', 120, 1000));
+  parts.push(`<w:p><w:pPr><w:pStyle w:val="Titleheader"/><w:spacing w:before="120" w:after="0"/></w:pPr>
+    ${run((candidateName || 'KANDIDAT').toUpperCase(), { major: true, bold: true, sz: 52, color: '414042' })}</w:p>`);
+
+  parts.push(`<w:p><w:pPr><w:pStyle w:val="Coverdoctitle"/><w:spacing w:before="4080" w:after="0"/></w:pPr>
+    ${run('VERTRAULICHER KANDIDATENBERICHT', { sz: 32, color: '102E66' })}</w:p>`);
+
+  if (position) parts.push(`<w:p><w:pPr><w:pStyle w:val="Coverdate"/><w:spacing w:before="720" w:after="1000"/></w:pPr>
+    ${run(position.toUpperCase(), { major: true, bold: true, sz: 28, color: '414042' })}</w:p>`);
+
+  if (client && client !== 'Vertraulich') parts.push(`<w:p><w:pPr><w:pStyle w:val="Coverdate"/><w:spacing w:before="120" w:after="120"/></w:pPr>
+    ${run(client, { major: true, bold: true, sz: 32, color: '414042' })}</w:p>`);
+
+  parts.push(`<w:p><w:pPr><w:pStyle w:val="Coverdate"/><w:spacing w:before="120" w:after="1000"/></w:pPr>
+    ${run(datum || '', { sz: 22, color: '414042' })}</w:p>`);
+
   parts.push(np('', 120));
   parts.push(np('Dieser Vertrauliche Bericht enthält zum Teil Informationen, die uns unter Zusicherung strengster Vertraulichkeit mitgeteilt wurden. Entsprechend unseren berufsethischen Prinzipien müssen wir Sie dazu verpflichten, nur einer begrenzten Auswahl von Personen, die sich direkt mit der Auswertung befassen, Einsicht in diese Berichte zu gewähren.', 120, undefined, { italic: true, color: '595959', sz: 18, jc: 'both' }));
   parts.push(np('Der Inhalt muss auch jeglichen Drittpersonen gegenüber geheim gehalten werden. Es dürfen keinerlei Referenzen ohne Zustimmung des Kandidaten oder unsererseits eingeholt werden.', 120, undefined, { italic: true, color: '595959', sz: 18, jc: 'both' }));
@@ -136,70 +206,65 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
     if (!content.length) continue;
 
     const ku = section.key.toUpperCase();
-    const isPersonal = ku.includes('PERSÖN') || ku.includes('PERSOEN') || ku.includes('PERSONAL');
-    const isExperience = ku.includes('BERUFSERFAHRUNG') || ku.includes('BERUFLICHER') || ku.includes('WORK EXPERIENCE') || ku.includes('PROFESSIONAL EXPERIENCE');
-    const isKarriere = ku.includes('KARRIERE') || ku.includes('CAREER SUMMARY');
-    const isVergütung = ku.includes('VERGÜTUNG') || ku.includes('VERGUETUNG') || ku.includes('COMPENSATION');
-    const isKandidaten = ku.includes('FACHLICHES') || ku.includes('BEWERTUNG') || ku.includes('PERSONALITY') || ku.includes('KANDIDATEN') || ku.includes('MOTIVATION');
+    const isPersonal = ku.includes('PERS') && (ku.includes('NLICH') || ku.includes('ONAL'));
+    const isExperience = ku.includes('BERUFS') || ku.includes('BERUFLICHER') || ku.includes('WORK EXP') || ku.includes('PROFESSIONAL EXP');
+    const isKarriere = ku.includes('KARRIERE') || ku.includes('CAREER');
+    const isVergütung = ku.includes('VERG') || ku.includes('COMPENSATION');
+    const isKandidaten = ku.includes('FACHLICH') || ku.includes('BEWERTUNG') || ku.includes('PERSONALITY') || ku.includes('KANDIDATEN') || ku.includes('MOTIVATION');
     const pageBreak = needsPageBreak(section.key);
 
-    // Section heading with page break
-    parts.push(sp('berschrift2', section.key.toUpperCase(), 120, undefined, { pageBreak, bold: true, sz: 28 }));
+    parts.push(sectionHead(section.key.toUpperCase(), pageBreak));
     parts.push(hr());
 
-    // PERSONAL DETAILS — label [tabs] value layout
+    // PERSONAL DETAILS
     if (isPersonal) {
       for (const line of content) {
         if (line.includes(':')) {
           const idx = line.indexOf(':');
-          const label = line.slice(0, idx).trim();
-          const value = line.slice(idx + 1).trim();
-          parts.push(personalRow(label, value));
+          parts.push(personalRow(line.slice(0, idx).trim(), line.slice(idx + 1).trim()));
         } else {
-          parts.push(sp('SPTBodytext66', line));
+          parts.push(personalRow(line, ''));
         }
       }
       parts.push(np('', 120));
       continue;
     }
 
-    // VERGÜTUNG — bold, larger spacing
+    // VERGÜTUNG
     if (isVergütung) {
       for (const line of content) {
         if (line.includes(':')) {
           const idx = line.indexOf(':');
           const label = line.slice(0, idx).trim();
           const value = line.slice(idx + 1).trim();
-          parts.push(`<w:p>
-            <w:pPr><w:spacing w:before="160" w:after="160"/></w:pPr>
-            <w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(label)}: </w:t></w:r>
-            <w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(value)}</w:t></w:r>
-          </w:p>`);
+          parts.push(`<w:p><w:pPr><w:spacing w:before="160" w:after="160"/></w:pPr>
+            ${run(label + ': ', { bold: true, sz: 22, color: '414042' })}
+            ${run(value, { sz: 22, color: '262626' })}</w:p>`);
         } else {
-          parts.push(np(line, 160, 160, { bold: true }));
+          parts.push(np(line, 160, 160, { bold: true, sz: 22 }));
         }
       }
       parts.push(np('', 120));
       continue;
     }
 
-    // KARRIERE — bold, good spacing
+    // KARRIERE
     if (isKarriere) {
       for (const line of content) {
-        parts.push(np(line, 120, 160, { bold: true }));
+        parts.push(np(line, 120, 160, { bold: true, sz: 22, color: '262626' }));
       }
       parts.push(np('', 120));
       continue;
     }
 
-    // FACHLICHES / BEWERTUNG / KANDIDATEN
+    // FACHLICHES / BEWERTUNG
     if (isKandidaten) {
       for (const line of content) {
         if (!line.trim()) continue;
         if (/^[-•]/.test(line)) {
-          parts.push(sp('Listenabsatz', line.replace(/^[-•]\s*/, ''), 60, 120, { sz: 24 }));
+          parts.push(bullet(line.replace(/^[-•]\s*/, '')));
         } else {
-          parts.push(np(line, 160, 160, { jc: 'both', sz: 22 }));
+          parts.push(np(line, 160, 160, { jc: 'both', sz: 22, color: '262626' }));
         }
       }
       parts.push(np('', 120));
@@ -214,36 +279,29 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
         const line = content[i];
         const isBullet = /^[-–•]/.test(line);
         const isCompanyDesc = /^\*/.test(line);
-        const isCompanyHeader = /^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan\.|Feb\.|Mär\.|Apr\.|Jun\.|Jul\.|Aug\.|Sep\.|Okt\.|Nov\.|Dez\.|Oct\.|Sept?\.|Jan\s|Feb\s|\d{2}\/\d{4}|\d{4})/.test(line) && !isBullet;
+        const isDateHeader = /^(Jan|Feb|Mär|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez|Oct|Mar|Januar|Februar|März|April|Juni|Juli|August|September|Oktober|November|Dezember|January|February|March|April|May|June|July|August|September|October|November|December|\d{2}\/\d{4}|\d{4})/.test(line) && !isBullet;
 
-        if (isCompanyHeader) {
+        if (isDateHeader) {
           if (!firstCompany) parts.push(hr());
           firstCompany = false;
-          // Date + company: date part auto color (not petrol), company bold larger
-          const colonIdx = line.indexOf(':');
-          const dashIdx = line.indexOf(' - ', 8);
-          let datePart = line;
-          let companyPart = '';
-          if (colonIdx > 0) { datePart = line.slice(0, colonIdx).trim(); companyPart = line.slice(colonIdx + 1).trim(); }
-          else if (dashIdx > 0) { datePart = line.slice(0, dashIdx).trim(); companyPart = line.slice(dashIdx + 3).trim(); }
-
-          if (companyPart) {
-            parts.push(`<w:p>
-              <w:pPr><w:pStyle w:val="Amrop-header"/><w:spacing w:before="120" w:after="120"/></w:pPr>
-              <w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(datePart)}: </w:t></w:r>
-              <w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t xml:space="preserve">${xe(companyPart)}</w:t></w:r>
-            </w:p>`);
-          } else {
-            parts.push(sp('Amrop-header', line, 120, 120, { sz: 22 }));
-          }
+          // Split on colon or " - " to get date vs company
+          let datePart = line, companyPart = '';
+          const colonIdx = line.indexOf(': ');
+          const dashIdx = line.indexOf(' - ');
+          if (colonIdx > 4) { datePart = line.slice(0, colonIdx); companyPart = line.slice(colonIdx + 2); }
+          else if (dashIdx > 4) { datePart = line.slice(0, dashIdx); companyPart = line.slice(dashIdx + 3); }
+          parts.push(companyHeader(datePart, companyPart));
         } else if (isCompanyDesc) {
-          parts.push(sp('Listing1', line.replace(/^\*|\*$/g, ''), 120, undefined, { sz: 22 }));
+          // Listing1 — company description italic
+          const r = rpr({ sz: 22, color: '595959', italic: true });
+          parts.push(`<w:p><w:pPr><w:pStyle w:val="Listing1"/><w:spacing w:before="60" w:after="60"/>${r}</w:pPr>
+            <w:r>${r}<w:t xml:space="preserve">${xe(line.replace(/^\*|\*$/g, ''))}</w:t></w:r></w:p>`);
           parts.push(hr());
         } else if (isBullet) {
-          parts.push(sp('Listenabsatz', line.replace(/^[-–•]\s*/, ''), 60, 120, { sz: 24 }));
+          parts.push(bullet(line.replace(/^[-–•]\s*/, '')));
         } else if (line.trim()) {
-          // Job title — bold
-          parts.push(np(line, 120, 120, { bold: true, sz: 24 }));
+          // Job title — bold, sz=24
+          parts.push(np(line, 120, 80, { bold: true, sz: 24, color: '262626' }));
         }
         i++;
       }
@@ -253,7 +311,7 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
 
     // Default (education etc.)
     for (const line of content) {
-      parts.push(np(line, 120, 120, { jc: 'both' }));
+      parts.push(np(line, 120, 80, { sz: 22, color: '262626' }));
     }
     parts.push(np('', 120));
   }
