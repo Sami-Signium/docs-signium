@@ -1113,7 +1113,18 @@ function buildPrompt() {
     const klientLine = klient ? '\nKlient: ' + klient : '';
     const langInstr = sprache === 'englisch' ? 'Write the report in English.' : 'Schreibe den Bericht auf Deutsch.';
 
-    const signiumFormat = 'Du bist Dr. Sami Hamid, Managing Partner bei Signium Austria. Erstelle einen professionellen Vertraulichen Kandidatenbericht im Signium-Format.\n\n' + langInstr + '\n\nTon: Substanziell, praezise, Berater-Perspektive.\n\nWICHTIG: Lass jeden Abschnitt komplett weg zu dem du keine Informationen hast. Kein Platzhalter, keine leeren Felder - einfach weglassen.\n\nFormat:\n\nVERTRAULICHER BERICHT\n[NAME]\n[POSITION]' + klientLine + '\n[Monat Jahr]\n\nPERSONLICHE DATEN\n[Name, Geburtsdatum wenn vorhanden, Wohnort, Nationalitat, Familienstand wenn vorhanden, Sprachen]\n\nAUSBILDUNG\n[Chronologisch - Institution, Abschluss, Jahr]\n\nVERGUTUNG & VERFUGBARKEIT\n[Nur wenn Informationen vorhanden: Fixgehalt, Bonus, Kundigungsfrist, Umzugsbereitschaft]\n\nBERUFLICHER WERDEGANG\n[Fur jede Position: Zeitraum, Unternehmen, Jobtitel, kurze Firmenbeschreibung, Hauptverantwortlichkeiten als Bullets, Key Achievements als Bullets]\n\nANMERKUNGEN ZUM WERDEGANG\n\nZUSAMMENFASSUNG\n[3-4 Paragraphen aus Berater-Perspektive]\n\nBERUFLICH-FACHLICHE EIGNUNG' + positionLine + '\n[Konkrete Bewertung Starken und Eignung]\n\nMOTIVATION\n[Nur wenn in Notizen vorhanden]\n\nPERSONLICHKEIT\n[Nur wenn in Notizen vorhanden]\n\nEMPFEHLUNG\n[Nur wenn genugende Infos vorhanden]\n\n---\n\nCV-INHALT:\n' + uploadedCV + notesSection
+    const signiumFormat = langInstr + '\n\nDu bist Dr. Sami Hamid, Managing Partner Signium Austria. Erstelle einen VERTRAULICHEN KANDIDATENBERICHT im Signium-Format.\n\nDER BERICHT IST KEIN CV. Er ist eine professionelle Berater-Einschaetzung fuer den Klienten. Schreibe substanziell, praezise, auf Augenhoehe mit Vorstaenden.\n\nWICHTIG: Lass Abschnitte ohne Information komplett weg.\n\n' +
+    'TEIL 1 - FAKTISCHER TEIL (aus dem CV):\n\n' +
+    'PERSOENLICHE DATEN\n(Name, Geburtsdatum, Wohnort, Nationalitaet, Familienstand, Sprachen - nur was vorhanden)\n\n' +
+    'AUSBILDUNG\n(Chronologisch - Institution, Abschluss, Jahr)\n\n' +
+    (notesContent && notesContent.includes('gehalt') || notesContent && notesContent.includes('Gehalt') || notesContent && notesContent.includes('salary') ? 'VERGUETUNG & VERFUEGBARKEIT\n(Nur wenn in Notizen erwaehnt)\n\n' : '') +
+    'BERUFLICHER WERDEGANG\n(Fuer jede Position EXAKT so strukturieren:\nZEITRAUM | UNTERNEHMEN, ORT\nJobtitel\nUnternehmensbeschreibung in Kursiv - 1 praegnanter Satz\nHauptverantwortlichkeiten:\n- [konkrete Verantwortung]\n- [konkrete Verantwortung]\nKey Achievements:\n- [messbarer Erfolg]\n- [messbarer Erfolg])\n\n' +
+    'TEIL 2 - BEWERTUNGSTEIL (aus Berater-Perspektive):\n\n' +
+    'ANMERKUNGEN ZUM WERDEGANG\n\n' +
+    'ZUSAMMENFASSUNG\n(3-4 Paragraphen: Wer ist diese Person? Was macht sie besonders? Welche Karriere-Logik steckt dahinter? Berater-Sprache, nicht CV-Sprache.)\n\n' +
+    'BERUFLICH-FACHLICHE EIGNUNG' + positionLine + '\n(Konkrete Eignung fuer die Zielrolle - Staerken, relevante Erfahrungen, Luecken)\n\n' +
+    (notesContent ? 'MOTIVATION\n(Aus den Notizen: Warum ist die Person offen fuer einen Wechsel?)\n\nPERSONLICHKEIT\n(Aus den Notizen: Fuehrungsstil, Kommunikation, Eindruck im Gespraech)\n\nEMPFEHLUNG\n(Klare Empfehlung des Beraters)\n' : '') +
+    '\n---\n\nCV-INHALT:\n' + uploadedCV + notesSection
 
     return { type: 'text', prompt: signiumFormat };
   }
