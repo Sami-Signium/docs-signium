@@ -20,7 +20,7 @@ function sp(styleId, text, before, after, opts) {
     ppr += `<w:spacing${b}${a}/>`;
   }
   if (!text && text !== 0) return `<w:p><w:pPr>${ppr}</w:pPr></w:p>`;
-  let rpr = '<w:rPr>';
+  let rpr = `<w:rPr><w:color w:val="auto"/>`;
   if (opts.bold) rpr += '<w:b/>';
   if (opts.sz) rpr += `<w:sz w:val="${opts.sz}"/><w:szCs w:val="${opts.sz}"/>`;
   rpr += '</w:rPr>';
@@ -37,10 +37,12 @@ function np(text, before, after, opts) {
     ppr += `<w:spacing${b}${a}/>`;
   }
   if (opts.jc) ppr += `<w:jc w:val="${opts.jc}"/>`;
-  let rpr = '<w:rPr>';
+  let rpr = `<w:rPr>`;
   if (opts.bold) rpr += '<w:b/>';
   if (opts.italic) rpr += '<w:i/>';
-  if (opts.color) rpr += `<w:color w:val="${opts.color}"/>`;
+  // Always explicit color - auto = black, no petrol
+  const color = opts.color || 'auto';
+  rpr += `<w:color w:val="${color}"/>`;
   const sz = opts.sz || 22;
   rpr += `<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`;
   rpr += '</w:rPr>';
@@ -48,9 +50,18 @@ function np(text, before, after, opts) {
   return `<w:p><w:pPr>${ppr}</w:pPr><w:r>${rpr}<w:t xml:space="preserve">${xe(text)}</w:t></w:r></w:p>`;
 }
 
-// Horizontal rule (dashes line — exactly as in revised doc)
+// Personal details row: Label [4 tabs] Value — exact structure from revised doc
+function personalRow(label, value) {
+  return `<w:p>
+    <w:pPr><w:pStyle w:val="SPTBodytext66"/></w:pPr>
+    <w:r><w:rPr><w:color w:val="auto"/></w:rPr><w:t>${xe(label)}</w:t><w:tab/><w:tab/><w:tab/><w:tab/></w:r>
+    <w:r><w:rPr><w:color w:val="262626"/></w:rPr><w:t xml:space="preserve">${xe(value)}</w:t></w:r>
+  </w:p>`;
+}
+
+// Horizontal rule
 function hr() {
-  return np('________________________________________________________________________________', 120, undefined, { color: 'AAAAAA', sz: 18 });
+  return np('________________________________________________________________________________', 60, 60, { color: 'AAAAAA', sz: 16 });
 }
 
 const SECTION_KEYS = [
@@ -72,13 +83,16 @@ const SUB_KEYS = [
   'BEWERBERMOTIVATION','MOTIVATION','KANDIDATENMOTIVATION'
 ];
 
-// Sections that start on a new page
-const NEW_PAGE = ['VERGÜTUNG','VERGUETUNG','COMPENSATION','KARRIERE','CAREER SUMMARY',
-  'FACHLICHES','BEWERTUNG','PERSONALITY','BERUFSERFAHRUNG','BERUFLICHER','WORK EXPERIENCE','PROFESSIONAL EXPERIENCE'];
-
 function needsPageBreak(key) {
   const u = key.toUpperCase();
-  return NEW_PAGE.some(k => u.startsWith(k));
+  if (u.includes('PERS') && (u.includes('NLICHE') || u.includes('NLICH') || u.includes('ONAL'))) return true;
+  if (u.includes('AUSBILDUNG') || u.includes('EDUCATION')) return true;
+  if (u.includes('VERG') || u.includes('COMPENSATION')) return true;
+  if (u.includes('KARRIERE') || u.includes('CAREER')) return true;
+  if (u.includes('FACHLICH') || u.includes('PROFESSIONAL SUMMARY')) return true;
+  if (u.includes('BEWERTUNG') || u.includes('PERSONALITY')) return true;
+  if (u.includes('BERUFS') || u.includes('BERUFLICHER') || u.includes('WORK EXP') || u.includes('PROFESSIONAL EXP')) return true;
+  return false;
 }
 
 function parseReport(raw) {
@@ -98,11 +112,6 @@ function parseReport(raw) {
   }
   result.push(current);
   return result;
-}
-
-function isSubSection(line) {
-  const u = line.trim().toUpperCase();
-  return SUB_KEYS.some(s => u === s || u.startsWith(s + ':'));
 }
 
 function buildBodyXml(reportText, candidateName, position, client, datum) {
@@ -128,25 +137,24 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
 
     const ku = section.key.toUpperCase();
     const isPersonal = ku.includes('PERSÖN') || ku.includes('PERSOEN') || ku.includes('PERSONAL');
-    const isKandidaten = ku.includes('KANDIDATEN') || ku.includes('CANDIDATE A') || ku.includes('CANDIDATE E') || ku.includes('FACHLICHES') || ku.includes('BEWERTUNG') || ku.includes('MOTIVATION');
     const isExperience = ku.includes('BERUFSERFAHRUNG') || ku.includes('BERUFLICHER') || ku.includes('WORK EXPERIENCE') || ku.includes('PROFESSIONAL EXPERIENCE');
     const isKarriere = ku.includes('KARRIERE') || ku.includes('CAREER SUMMARY');
     const isVergütung = ku.includes('VERGÜTUNG') || ku.includes('VERGUETUNG') || ku.includes('COMPENSATION');
+    const isKandidaten = ku.includes('FACHLICHES') || ku.includes('BEWERTUNG') || ku.includes('PERSONALITY') || ku.includes('KANDIDATEN') || ku.includes('MOTIVATION');
     const pageBreak = needsPageBreak(section.key);
 
-    // Section heading
+    // Section heading with page break
     parts.push(sp('berschrift2', section.key.toUpperCase(), 120, undefined, { pageBreak, bold: true, sz: 28 }));
     parts.push(hr());
 
-    // PERSONAL DETAILS — SPTBodytext66 with label+value merged
+    // PERSONAL DETAILS — label [tabs] value layout
     if (isPersonal) {
       for (const line of content) {
         if (line.includes(':')) {
           const idx = line.indexOf(':');
           const label = line.slice(0, idx).trim();
           const value = line.slice(idx + 1).trim();
-          // Label and value in same paragraph like original (SPTBodytext66)
-          parts.push(`<w:p><w:pPr><w:pStyle w:val="SPTBodytext66"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${xe(label)}</w:t></w:r><w:r><w:t xml:space="preserve">${xe(value ? '   ' + value : '')}</w:t></w:r></w:p>`);
+          parts.push(personalRow(label, value));
         } else {
           parts.push(sp('SPTBodytext66', line));
         }
@@ -155,33 +163,43 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
       continue;
     }
 
-    // VERGÜTUNG — bold lines
+    // VERGÜTUNG — bold, larger spacing
     if (isVergütung) {
       for (const line of content) {
-        parts.push(np(line, 120, undefined, { bold: true }));
+        if (line.includes(':')) {
+          const idx = line.indexOf(':');
+          const label = line.slice(0, idx).trim();
+          const value = line.slice(idx + 1).trim();
+          parts.push(`<w:p>
+            <w:pPr><w:spacing w:before="160" w:after="160"/></w:pPr>
+            <w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(label)}: </w:t></w:r>
+            <w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(value)}</w:t></w:r>
+          </w:p>`);
+        } else {
+          parts.push(np(line, 160, 160, { bold: true }));
+        }
       }
       parts.push(np('', 120));
       continue;
     }
 
-    // KARRIERE — bold, before=60, after=120
+    // KARRIERE — bold, good spacing
     if (isKarriere) {
       for (const line of content) {
-        parts.push(np(line, 60, 120, { bold: true }));
+        parts.push(np(line, 120, 160, { bold: true }));
       }
       parts.push(np('', 120));
       continue;
     }
 
-    // KANDIDATENBEWERTUNG / FACHLICHES / BEWERTUNG — normal paragraphs
+    // FACHLICHES / BEWERTUNG / KANDIDATEN
     if (isKandidaten) {
-      // If this section key is itself a sub-section (FACHLICHES, BEWERTUNG), just render content
       for (const line of content) {
         if (!line.trim()) continue;
         if (/^[-•]/.test(line)) {
           parts.push(sp('Listenabsatz', line.replace(/^[-•]\s*/, ''), 60, 120, { sz: 24 }));
         } else {
-          parts.push(np(line, 120, undefined, { jc: 'both' }));
+          parts.push(np(line, 160, 160, { jc: 'both', sz: 22 }));
         }
       }
       parts.push(np('', 120));
@@ -195,15 +213,29 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
       while (i < content.length) {
         const line = content[i];
         const isBullet = /^[-–•]/.test(line);
-        const isCompanyDesc = /^\*/.test(line); // italic company description
-
-        // Detect company header line: starts with month/year pattern
-        const isCompanyHeader = /^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan\.|Feb\.|Mär\.|Apr\.|Mai\.|Jun\.|Jul\.|Aug\.|Sep\.|Okt\.|Nov\.|Dez\.|Oct\.|Sept?\.|Jan\s|Feb\s|\d{2}\/\d{4}|\d{4})/.test(line) && !isBullet;
+        const isCompanyDesc = /^\*/.test(line);
+        const isCompanyHeader = /^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan\.|Feb\.|Mär\.|Apr\.|Jun\.|Jul\.|Aug\.|Sep\.|Okt\.|Nov\.|Dez\.|Oct\.|Sept?\.|Jan\s|Feb\s|\d{2}\/\d{4}|\d{4})/.test(line) && !isBullet;
 
         if (isCompanyHeader) {
           if (!firstCompany) parts.push(hr());
           firstCompany = false;
-          parts.push(sp('Amrop-header', line, 120, 120, { sz: 22 }));
+          // Date + company: date part auto color (not petrol), company bold larger
+          const colonIdx = line.indexOf(':');
+          const dashIdx = line.indexOf(' - ', 8);
+          let datePart = line;
+          let companyPart = '';
+          if (colonIdx > 0) { datePart = line.slice(0, colonIdx).trim(); companyPart = line.slice(colonIdx + 1).trim(); }
+          else if (dashIdx > 0) { datePart = line.slice(0, dashIdx).trim(); companyPart = line.slice(dashIdx + 3).trim(); }
+
+          if (companyPart) {
+            parts.push(`<w:p>
+              <w:pPr><w:pStyle w:val="Amrop-header"/><w:spacing w:before="120" w:after="120"/></w:pPr>
+              <w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(datePart)}: </w:t></w:r>
+              <w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t xml:space="preserve">${xe(companyPart)}</w:t></w:r>
+            </w:p>`);
+          } else {
+            parts.push(sp('Amrop-header', line, 120, 120, { sz: 22 }));
+          }
         } else if (isCompanyDesc) {
           parts.push(sp('Listing1', line.replace(/^\*|\*$/g, ''), 120, undefined, { sz: 22 }));
           parts.push(hr());
@@ -221,7 +253,7 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
 
     // Default (education etc.)
     for (const line of content) {
-      parts.push(np(line, 120, undefined, { jc: 'both' }));
+      parts.push(np(line, 120, 120, { jc: 'both' }));
     }
     parts.push(np('', 120));
   }
@@ -273,11 +305,9 @@ export default async function handler(req, res) {
 
     const newDocXml = docXmlRaw.substring(0, bodyStart) + '\n' +
       buildBodyXml(text, candidateName, position, client, datum) + '\n' +
-      sectPr + '\n' +
-      docXmlRaw.substring(bodyEnd);
+      sectPr + '\n' + docXmlRaw.substring(bodyEnd);
 
     zip.file('word/document.xml', newDocXml);
-
     const outputBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
     const safeName = (candidateName || 'Kandidat').replace(/\s+/g, '_');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
