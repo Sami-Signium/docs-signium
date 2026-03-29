@@ -1176,7 +1176,7 @@ async function generateDocument() {
       messages = [{ role: 'user', content: promptData.prompt }];
     }
 
-    const response = await fetch('/.netlify/functions/docs-generate', {
+    const response = await fetch('/api/docs-generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages })
