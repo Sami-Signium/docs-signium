@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DOCS | Signium Suite</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'DM Sans', 'Segoe UI', sans-serif; background: #F4F6FA; color: #1a1a2e; min-height: 100vh; }
@@ -286,8 +284,6 @@
 </div>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
 let generatedText = '';
 let currentDocType = 'kandidatenbericht';
 let cvText = '';
@@ -353,41 +349,38 @@ async function processFile(file, zoneId, statusId, inputId) {
   zone.classList.add('loaded');
 
   try {
-    let text = '';
-    if (file.name.endsWith('.pdf')) {
-      text = await extractPdfText(file);
-    } else if (file.name.endsWith('.docx') || file.name.endsWith('.doc')) {
-      text = await extractDocxText(file);
-    } else {
-      text = await file.text();
-    }
+    // Convert file to base64 and send to server for extraction
+    const base64 = await fileToBase64(file);
+    const response = await fetch('/api/extract-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileBase64: base64, fileName: file.name })
+    });
+
+    if (!response.ok) throw new Error('Extraktion fehlgeschlagen');
+    const data = await response.json();
+    const text = data.text || '';
+
+    if (!text || text.length < 50) throw new Error('Kein Text gefunden');
 
     if (inputId === 'cvFile') cvText = text;
     else notesText = text;
 
-    status.textContent = '✓ ' + file.name.substring(0, 30) + (file.name.length > 30 ? '...' : '');
+    status.textContent = '✓ ' + file.name.substring(0, 28) + (file.name.length > 28 ? '...' : '') + ' (' + Math.round(text.length/100)/10 + 'k Zeichen)';
   } catch (err) {
-    status.textContent = '✗ Fehler beim Lesen';
+    status.textContent = '✗ Fehler: ' + err.message;
+    zone.classList.remove('loaded');
     console.error(err);
   }
 }
 
-async function extractPdfText(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let text = '';
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    text += content.items.map(item => item.str).join(' ') + '\n';
-  }
-  return text;
-}
-
-async function extractDocxText(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
-  return result.value;
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 // ── GENERATE ───────────────────────────────────────────────────────────────
