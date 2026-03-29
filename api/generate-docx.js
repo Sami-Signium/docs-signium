@@ -3,31 +3,71 @@ const {
   AlignmentType, BorderStyle, WidthType, ShadingType
 } = require('docx');
 
-const NAVY = '081D4D';
-const ORANGE = 'FF6A42';
-const FONT = 'Gill Sans MT';
+const NAVY   = '102E66';
+const ORANGE = 'E8581A';
+const DARK   = '414042';
+const BODY   = '262626';
+const FONT   = 'Calibri';
 
-function emptyPara(pt) {
-  return new Paragraph({ spacing: { before: 0, after: (pt || 6) * 20 } });
+function sp(before, after) {
+  return { spacing: { before: before || 0, after: after !== undefined ? after : 0 } };
 }
 
-function orangeLine() {
+function orangeRule() {
   return new Paragraph({
-    border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: ORANGE, space: 1 } },
-    spacing: { before: 0, after: 80 }
+    ...sp(0, 120),
+    border: { bottom: { style: BorderStyle.SINGLE, size: 14, color: ORANGE, space: 2 } },
+    children: [new TextRun({ text: '', size: 4 })]
   });
 }
 
-function sectionHeader(text) {
+function sectionHeading(text) {
   return new Paragraph({
-    spacing: { before: 240, after: 80 },
+    ...sp(320, 40),
     children: [new TextRun({ text: text.toUpperCase(), bold: true, size: 22, color: NAVY, font: FONT })]
   });
 }
 
+function subHeading(text) {
+  return new Paragraph({
+    ...sp(200, 60),
+    children: [new TextRun({ text: text.toUpperCase(), bold: true, size: 20, color: NAVY, font: FONT })]
+  });
+}
+
+function bodyPara(text, opts) {
+  opts = opts || {};
+  return new Paragraph({
+    ...sp(opts.before || 0, opts.after !== undefined ? opts.after : 120),
+    alignment: opts.justify ? AlignmentType.BOTH : AlignmentType.LEFT,
+    children: [new TextRun({
+      text: text,
+      size: opts.size || 20,
+      bold: opts.bold || false,
+      italics: opts.italic || false,
+      color: opts.color || BODY,
+      font: FONT
+    })]
+  });
+}
+
+function bulletPara(text) {
+  const clean = text.replace(/^[-\u2022\u2013]\s*/, '');
+  return new Paragraph({
+    ...sp(40, 40),
+    indent: { left: 320, hanging: 200 },
+    children: [
+      new TextRun({ text: '\u2022  ', size: 20, color: ORANGE, font: FONT }),
+      new TextRun({ text: clean, size: 20, color: BODY, font: FONT })
+    ]
+  });
+}
+
 function buildPersonalTable(lines) {
-  const border = { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' };
-  const borders = { top: border, bottom: border, left: border, right: border };
+  const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+  const bottomBorder = { style: BorderStyle.SINGLE, size: 1, color: 'E0E0E0' };
+  const cellBorders = { top: noBorder, bottom: bottomBorder, left: noBorder, right: noBorder, insideH: noBorder, insideV: noBorder };
+
   const rows = lines.filter(l => l.includes(':')).map(l => {
     const idx = l.indexOf(':');
     const label = l.slice(0, idx).trim();
@@ -35,163 +75,191 @@ function buildPersonalTable(lines) {
     return new TableRow({
       children: [
         new TableCell({
-          borders, width: { size: 2800, type: WidthType.DXA },
-          shading: { fill: 'EEF2F8', type: ShadingType.CLEAR },
-          margins: { top: 80, bottom: 80, left: 120, right: 120 },
-          children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, size: 19, font: FONT, color: NAVY })] })]
+          borders: cellBorders,
+          width: { size: 2600, type: WidthType.DXA },
+          margins: { top: 80, bottom: 80, left: 0, right: 160 },
+          children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, size: 19, color: NAVY, font: FONT })] })]
         }),
         new TableCell({
-          borders, width: { size: 6200, type: WidthType.DXA },
-          margins: { top: 80, bottom: 80, left: 120, right: 120 },
-          children: [new Paragraph({ children: [new TextRun({ text: value, size: 19, font: FONT })] })]
+          borders: cellBorders,
+          width: { size: 6400, type: WidthType.DXA },
+          margins: { top: 80, bottom: 80, left: 0, right: 0 },
+          children: [new Paragraph({ children: [new TextRun({ text: value, size: 19, color: BODY, font: FONT })] })]
         })
       ]
     });
   });
+
   if (!rows.length) return null;
-  return new Table({ width: { size: 9000, type: WidthType.DXA }, columnWidths: [2800, 6200], rows });
+  const noBorderTable = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+  return new Table({
+    width: { size: 9000, type: WidthType.DXA },
+    columnWidths: [2600, 6400],
+    borders: { top: noBorderTable, bottom: noBorderTable, left: noBorderTable, right: noBorderTable, insideH: noBorderTable, insideV: noBorderTable },
+    rows
+  });
 }
+
+const SECTION_KEYS = [
+  'PERSÖNLICHE ANGABEN','PERSOENLICHE ANGABEN','PERSONAL DETAILS','PERSONAL DATA',
+  'AUSBILDUNG UND QUALIFIKATIONEN','AUSBILDUNG','EDUCATION & QUALIFICATIONS','EDUCATION',
+  'VERGÜTUNG UND VERFÜGBARKEIT','VERGUETUNG','COMPENSATION & AVAILABILITY','COMPENSATION',
+  'KARRIERE ZUSAMMENFASSUNG','CAREER SUMMARY',
+  'KANDIDATENBEWERTUNG','CANDIDATE ASSESSMENT',
+  'FACHLICHES RESÜMEE','FACHLICHES RESUME','PROFESSIONAL SUMMARY',
+  'BEWERTUNG','PERSONALITY',
+  'BEWERBERMOTIVATION','MOTIVATION',
+  'BERUFSERFAHRUNG','BERUFLICHER WERDEGANG','WORK EXPERIENCE','PROFESSIONAL EXPERIENCE',
+  'ANMERKUNGEN ZUM WERDEGANG'
+];
+
+const SUB_KEYS = [
+  'FACHLICHES RESÜMEE','FACHLICHES RESUME','PROFESSIONAL SUMMARY',
+  'BEWERTUNG','PERSONALITY','PERSÖNLICHKEIT',
+  'BEWERBERMOTIVATION','MOTIVATION'
+];
 
 function parseReport(raw) {
   const lines = raw.split('\n');
-  const sections = {};
-  let current = 'HEADER';
-  sections[current] = [];
-  const KEYS = [
-    'PERSÖNLICHE ANGABEN','PERSOENLICHE ANGABEN','PERSONAL DETAILS',
-    'AUSBILDUNG','EDUCATION',
-    'VERGÜTUNG','VERGUETUNG','COMPENSATION',
-    'KARRIERE ZUSAMMENFASSUNG','CAREER SUMMARY',
-    'KANDIDATENBEWERTUNG','FACHLICHES RESÜMEE','FACHLICHES RESUME','BEWERTUNG','BEWERBERMOTIVATION','MOTIVATION',
-    'BERUFSERFAHRUNG','BERUFLICHER WERDEGANG','WORK EXPERIENCE','PROFESSIONAL EXPERIENCE',
-    'ANMERKUNGEN ZUM WERDEGANG'
-  ];
+  const result = [];
+  let current = { key: 'HEADER', lines: [] };
+
   for (const line of lines) {
-    const upper = line.trim().toUpperCase();
-    const matched = KEYS.find(k => upper === k || upper.startsWith(k));
-    if (matched && line.trim().length > 0) {
-      current = line.trim();
-      sections[current] = [];
+    const t = line.trim();
+    const u = t.toUpperCase();
+    const matched = SECTION_KEYS.find(k => u === k || u.startsWith(k + ' ') || u.startsWith(k + ':'));
+    if (matched && t.length > 0) {
+      result.push(current);
+      current = { key: t, lines: [] };
     } else {
-      sections[current].push(line);
+      current.lines.push(line);
     }
   }
-  return sections;
+  result.push(current);
+  return result;
+}
+
+function isSubSection(line) {
+  const u = line.trim().toUpperCase();
+  return SUB_KEYS.some(s => u === s || u.startsWith(s + ' ') || u.startsWith(s + ':'));
 }
 
 function buildDoc(reportText, candidateName, position, client, datum) {
   const sections = parseReport(reportText);
   const children = [];
 
-  // Cover
-  children.push(emptyPara(20));
+  // COVER
+  children.push(new Paragraph({ ...sp(80, 0) }));
   children.push(new Paragraph({
-    spacing: { before: 0, after: 60 },
-    children: [new TextRun({ text: (candidateName || 'KANDIDAT').toUpperCase(), bold: true, size: 40, color: NAVY, font: FONT })]
+    ...sp(0, 60),
+    children: [new TextRun({ text: (candidateName || 'KANDIDAT').toUpperCase(), bold: true, size: 52, color: DARK, font: FONT })]
   }));
   children.push(new Paragraph({
-    spacing: { before: 0, after: 80 },
-    children: [new TextRun({ text: 'VERTRAULICHER KANDIDATENBERICHT', bold: true, size: 26, color: ORANGE, font: FONT })]
+    ...sp(0, 80),
+    children: [new TextRun({ text: 'VERTRAULICHER KANDIDATENBERICHT', size: 28, color: NAVY, font: FONT })]
   }));
   if (position) {
     children.push(new Paragraph({
-      spacing: { before: 0, after: 40 },
-      children: [new TextRun({ text: position.toUpperCase(), bold: true, size: 22, color: NAVY, font: FONT })]
+      ...sp(0, 60),
+      children: [new TextRun({ text: position.toUpperCase(), bold: true, size: 24, color: DARK, font: FONT })]
     }));
   }
-  if (client) {
+  if (client && client !== 'Vertraulich') {
     children.push(new Paragraph({
-      spacing: { before: 0, after: 40 },
-      children: [new TextRun({ text: client, size: 20, color: '444444', font: FONT })]
+      ...sp(0, 40),
+      children: [new TextRun({ text: client, size: 22, color: DARK, font: FONT })]
     }));
   }
   children.push(new Paragraph({
-    spacing: { before: 0, after: 200 },
-    children: [new TextRun({ text: datum || '', size: 18, color: '888888', font: FONT })]
+    ...sp(0, 320),
+    children: [new TextRun({ text: datum || '', size: 20, color: '888888', font: FONT })]
   }));
-  children.push(orangeLine());
-  children.push(emptyPara(8));
+  children.push(orangeRule());
+  children.push(new Paragraph({ ...sp(0, 80) }));
   children.push(new Paragraph({
-    spacing: { before: 0, after: 240 },
+    ...sp(0, 280),
+    alignment: AlignmentType.BOTH,
     children: [new TextRun({
-      text: 'Dieser Vertrauliche Bericht enthält zum Teil Informationen, die uns unter Zusicherung strengster Vertraulichkeit mitgeteilt wurden. Entsprechend unseren berufsethischen Prinzipien müssen wir Sie dazu verpflichten, nur einer begrenzten Auswahl von Personen, die sich direkt mit der Auswertung befassen, Einsicht in diese Berichte zu gewähren. Der Inhalt muss auch jeglichen Drittpersonen gegenüber geheim gehalten werden.',
-      size: 17, italics: true, color: '555555', font: FONT
+      text: 'Dieser Vertrauliche Bericht enthält zum Teil Informationen, die uns unter Zusicherung strengster Vertraulichkeit mitgeteilt wurden. Entsprechend unseren berufsethischen Prinzipien müssen wir Sie dazu verpflichten, nur einer begrenzten Auswahl von Personen, die sich direkt mit der Auswertung befassen, Einsicht in diese Berichte zu gewähren. Der Inhalt muss auch jeglichen Drittpersonen gegenüber geheim gehalten werden. Es dürfen keinerlei Referenzen ohne Zustimmung des Kandidaten oder unsererseits eingeholt werden.',
+      size: 17, italics: true, color: '666666', font: FONT
     })]
   }));
 
-  // Sections
-  for (const [key, lines] of Object.entries(sections)) {
-    if (key === 'HEADER') continue;
-    const content = lines.map(l => l.trim()).filter(Boolean);
+  // SECTIONS
+  for (const section of sections) {
+    if (section.key === 'HEADER') continue;
+    const content = section.lines.map(l => l.trim()).filter(Boolean);
     if (!content.length) continue;
 
-    children.push(sectionHeader(key));
-    children.push(orangeLine());
+    const ku = section.key.toUpperCase();
+    const isPersonal = ku.includes('PERSÖN') || ku.includes('PERSOEN') || ku.includes('PERSONAL');
+    const isKandidaten = ku.includes('KANDIDATEN') || ku.includes('CANDIDATE ASSESSMENT');
 
-    const keyUpper = key.toUpperCase();
-    const isPersonal = keyUpper.includes('PERSÖN') || keyUpper.includes('PERSOEN') || keyUpper.includes('PERSONAL');
+    children.push(sectionHeading(section.key));
+    children.push(orangeRule());
+
+    if (isKandidaten) {
+      let curSub = null;
+      let subLines = [];
+      const flush = () => {
+        if (!curSub || !subLines.length) return;
+        children.push(subHeading(curSub));
+        for (const l of subLines) {
+          if (!l.trim()) continue;
+          if (/^[-\u2022]/.test(l)) children.push(bulletPara(l));
+          else children.push(bodyPara(l, { justify: true, after: 140 }));
+        }
+        subLines = [];
+      };
+      for (const line of content) {
+        if (isSubSection(line)) { flush(); curSub = line.trim(); }
+        else subLines.push(line);
+      }
+      flush();
+      continue;
+    }
 
     if (isPersonal) {
       const tbl = buildPersonalTable(content);
-      if (tbl) { children.push(tbl); children.push(emptyPara(10)); continue; }
+      if (tbl) { children.push(tbl); children.push(new Paragraph({ ...sp(0, 80) })); continue; }
     }
 
     for (const line of content) {
-      const isBullet = /^[-•–]/.test(line);
-      const isCareerLine = /\d{4}/.test(line) && line.includes('|');
-      const isSubheading = line === line.toUpperCase() && line.length > 4 && !/\d/.test(line);
-      const isBold = /^(Hauptverantwortlichkeiten|Key Achievements|Verantwortlichkeiten):/.test(line);
+      const isBullet = /^[-\u2022\u2013]/.test(line);
+      const isCareer = /\d{4}/.test(line) && line.includes('|');
+      const isBoldLabel = /^(Hauptverantwortlichkeiten|Key Achievements|Verantwortlichkeiten|Responsibilities):?$/.test(line.trim());
+      const isItalic = line.startsWith('*') && line.endsWith('*');
 
-      if (isCareerLine) {
-        children.push(emptyPara(6));
-        children.push(new Paragraph({
-          spacing: { before: 60, after: 40 },
-          children: [new TextRun({ text: line, bold: true, size: 20, color: NAVY, font: FONT })]
-        }));
+      if (isCareer) {
+        children.push(new Paragraph({ ...sp(180, 40), children: [new TextRun({ text: line, bold: true, size: 20, color: NAVY, font: FONT })] }));
+      } else if (isBoldLabel) {
+        children.push(new Paragraph({ ...sp(120, 40), children: [new TextRun({ text: line, bold: true, size: 19, color: NAVY, font: FONT })] }));
       } else if (isBullet) {
-        children.push(new Paragraph({
-          spacing: { before: 40, after: 40 },
-          indent: { left: 360 },
-          children: [new TextRun({ text: '• ' + line.replace(/^[-•–]\s*/, ''), size: 19, font: FONT })]
-        }));
-      } else if (isBold) {
-        children.push(new Paragraph({
-          spacing: { before: 100, after: 40 },
-          children: [new TextRun({ text: line, bold: true, size: 19, color: NAVY, font: FONT })]
-        }));
-      } else if (isSubheading) {
-        children.push(new Paragraph({
-          spacing: { before: 160, after: 60 },
-          children: [new TextRun({ text: line, bold: true, size: 20, color: NAVY, font: FONT })]
-        }));
+        children.push(bulletPara(line));
+      } else if (isItalic) {
+        children.push(bodyPara(line.replace(/^\*|\*$/g, ''), { italic: true, color: '555555', after: 80 }));
       } else {
-        children.push(new Paragraph({
-          spacing: { before: 0, after: 100 },
-          children: [new TextRun({ text: line, size: 19, font: FONT })]
-        }));
+        children.push(bodyPara(line, { justify: true }));
       }
     }
   }
 
-  // Footer
-  children.push(emptyPara(30));
-  children.push(orangeLine());
+  // FOOTER
+  children.push(new Paragraph({ ...sp(300, 0) }));
+  children.push(orangeRule());
   children.push(new Paragraph({
-    spacing: { before: 120, after: 0 },
-    children: [new TextRun({ text: 'Vorbereitet von: Dr. Sami Hamid | Managing Partner | Signium Austria', size: 18, color: NAVY, font: FONT })]
+    ...sp(120, 0),
+    children: [new TextRun({ text: 'Vorbereitet von: Dr. Sami Hamid  |  Managing Partner  |  Signium Austria', size: 18, color: NAVY, font: FONT })]
   }));
   children.push(new Paragraph({
-    spacing: { before: 40, after: 0 },
-    children: [new TextRun({ text: 't +43 664 4568862 | sami.hamid@signium.com', size: 17, color: '555555', font: FONT })]
+    ...sp(40, 0),
+    children: [new TextRun({ text: 't +43 664 4568862  |  sami.hamid@signium.com', size: 17, color: '888888', font: FONT })]
   }));
 
   return new Document({
     sections: [{
       properties: {
-        page: {
-          size: { width: 11906, height: 16838 },
-          margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 }
-        }
+        page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 } }
       },
       children
     }]
@@ -202,17 +270,17 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
     const { text, candidateName, position, client, datum } = req.body;
+    if (!text) return res.status(400).json({ error: 'No text provided' });
     const doc = buildDoc(text, candidateName, position, client, datum);
     const buffer = await Packer.toBuffer(doc);
-
+    const safeName = (candidateName || 'Kandidat').replace(/\s+/g, '_');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', 'attachment; filename="Signium_Kandidatenbericht.docx"');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}_Signium_Bericht.docx"`);
     res.send(buffer);
   } catch (err) {
     res.status(500).json({ error: err.message });
