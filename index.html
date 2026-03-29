@@ -1052,6 +1052,41 @@ function removeFile(slot) {
   else { uploadedNotes = null; document.getElementById('file-info-notes').classList.remove('show'); document.getElementById('file-input-notes').value = ''; }
 }
 
+async function extractPdfText(file) {
+  if (!window.pdfjsLib) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    fullText += content.items.map(item => item.str).join(' ') + '\n';
+  }
+  return fullText;
+}
+
+async function extractDocxText(file) {
+  if (!window.mammoth) {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await window.mammoth.extractRawText({ arrayBuffer });
+  return result.value;
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
 // ── BUILD PROMPT ──
 function buildPrompt() {
   const baseInstructions = `Du bist ein Senior Executive Search Berater bei Signium Austria (Signium – Stein & Partner GmbH), Wien. Du schreibst professionelle Dokumente für Executive Search und Leadership Advisory im deutschsprachigen Raum (DACH) und CEE. Schreibe auf Deutsch. Kein Marketing-Sprech, kein generisches Blabla. Ton: substanziell, präzise, auf Augenhöhe mit Geschäftsführern und Vorständen. Keine Emojis.`;
