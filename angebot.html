@@ -1096,7 +1096,7 @@ async function generateAngebot() {
   showStatus(currentLang==='DE' ? 'Angebot wird generiert…' : 'Generating proposal…', 'info');
 
   try {
-    const res = await fetch('/.netlify/functions/generate-angebot', {
+    const res = await fetch('/api/generate-angebot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -1212,7 +1212,7 @@ async function handleBriefingUpload(event) {
     const mediaType = isPdf ? 'application/pdf'
       : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-    const res = await fetch('/.netlify/functions/ai-research-angebot', {
+    const res = await fetch('/api/ai-research-angebot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1302,7 +1302,7 @@ async function researchCompany() {
   hint.style.display = 'none';
 
   try {
-    const res = await fetch('/.netlify/functions/ai-research-angebot', {
+    const res = await fetch('/api/ai-research-angebot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'company', company, language: currentLang })
@@ -1348,7 +1348,7 @@ async function refinePosition() {
   hint.style.display = 'none';
 
   try {
-    const res = await fetch('/.netlify/functions/ai-research-angebot', {
+    const res = await fetch('/api/ai-research-angebot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode: 'position', company, positionTitle, keywords, language: currentLang })
