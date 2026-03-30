@@ -3,12 +3,12 @@
 //   mode: "company" - web search + profile text
 //   mode: "refine"  - refine freetext from keywords
 
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   let body;
-  try { body = JSON.parse(event.body); } 
-  catch { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
+  try { body = req.body; } 
+  catch { return res.status(400).json({ error: 'Invalid JSON' }); }
 
   const { mode, company, positionTitle, keywords, language } = body;
   const lang = language || 'DE';
@@ -99,14 +99,10 @@ Always write companyProfile and positionDescription as professional prose.`;
       const clean = raw.replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
       const extracted = JSON.parse(clean);
 
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ extracted }),
-      };
+      return res.status(200).json({ extracted });
     } catch (err) {
       console.error('Extract error:', err);
-      return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+      return res.status(500).json({ error: err.message });
     }
   }
 
@@ -151,7 +147,7 @@ Consultant notes/keywords: ${keywords || '(none)'}
 Write a professional position description for our proposal.`;
 
   } else {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Unknown mode' }) };
+    return res.status(400).json({ error: 'Unknown mode' });
   }
 
   try {
@@ -189,14 +185,11 @@ Write a professional position description for our proposal.`;
       .join('\n')
       .trim();
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    };
+    return res.status(200).json({ text });
 
   } catch (err) {
     console.error('AI research error:', err);
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+    return res.status(500).json({ error: err.message });
   }
 };
+
