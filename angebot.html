@@ -398,6 +398,38 @@
     margin-left:8px;
   }
 
+  /* ── DOCUMENT UPLOAD BLOCK ── */
+  .doc-upload-block {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: linear-gradient(135deg, #0d2559 0%, #122d6e 100%);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 4px;
+  }
+  .doc-upload-left { display:flex; align-items:center; gap:14px; }
+  .doc-upload-icon { font-size:24px; flex-shrink:0; }
+  .doc-upload-title { font-size:13px; font-weight:700; color:#fff; margin-bottom:3px; }
+  .doc-upload-sub { font-size:11.5px; color:rgba(255,255,255,.6); line-height:1.4; }
+  .doc-upload-right { flex-shrink:0; }
+  .btn-doc-upload {
+    background: var(--orange);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    padding: 9px 20px;
+    font-size: 12px; font-weight: 700;
+    cursor: pointer;
+    letter-spacing: .05em;
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .btn-doc-upload:hover { background:#e85a32; transform:translateY(-1px); box-shadow:0 4px 14px rgba(255,106,66,.4); }
+  #briefingStatus .ok  { background:#e8f5e9; color:#2e7d32; padding:8px 14px; border-radius:var(--radius); font-size:12.5px; }
+  #briefingStatus .err { background:#fdecea; color:#c62828; padding:8px 14px; border-radius:var(--radius); font-size:12.5px; }
+
   /* ── AI RESEARCH FIELDS ── */
   .ai-field-block {
     background: #f8faff;
@@ -634,6 +666,30 @@
         <div class="card-chevron open">&#9660;</div>
       </div>
       <div class="card-body open">
+
+        <!-- DOCUMENT UPLOAD BLOCK -->
+        <div class="doc-upload-block">
+          <div class="doc-upload-left">
+            <div class="doc-upload-icon">📎</div>
+            <div>
+              <div class="doc-upload-title">Dokument hochladen</div>
+              <div class="doc-upload-sub">Job Profil, Briefing, Anforderungsprofil — KI befüllt alle Felder automatisch</div>
+            </div>
+          </div>
+          <div class="doc-upload-right">
+            <button class="btn-doc-upload" onclick="document.getElementById('briefingFileInput').click()">
+              <span>↑ PDF oder Word</span>
+            </button>
+            <input type="file" id="briefingFileInput" accept=".pdf,.docx,.doc" style="display:none" onchange="handleBriefingUpload(event)">
+          </div>
+        </div>
+        <div class="ai-loading" id="loadingBriefing" style="display:none;margin-bottom:12px">
+          <div class="ai-spinner"></div>
+          <span>Dokument wird analysiert — befülle alle Formularfelder…</span>
+        </div>
+        <div id="briefingStatus"></div>
+
+        <div class="section-sep" style="margin:16px 0 14px">Felder manuell ausfüllen oder nach Upload prüfen</div>
 
         <!-- COMPANY PROFILE -->
         <div class="ai-field-block">
@@ -1131,6 +1187,97 @@ function setUploadStatus(msg, type) {
   const el = document.getElementById('uploadStatus');
   el.textContent = msg;
   el.className = `upload-status ${type}`;
+}
+
+// ─── BRIEFING DOCUMENT UPLOAD ────────────────────────────────────────────────
+async function handleBriefingUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const loading = document.getElementById('loadingBriefing');
+  const statusEl = document.getElementById('briefingStatus');
+  statusEl.innerHTML = '';
+  loading.style.display = 'flex';
+
+  try {
+    // Read file as base64
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+    const mediaType = isPdf ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    const res = await fetch('/.netlify/functions/ai-research-angebot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'extract',
+        fileBase64: base64,
+        mediaType,
+        fileName: file.name,
+        language: currentLang
+      })
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    // Fill all fields from extracted data
+    const d = data.extracted;
+    if (d.positionTitle)         setField('positionTitle', d.positionTitle);
+    if (d.clientCompany)         setField('clientCompany', d.clientCompany);
+    if (d.clientContactName)     setField('clientContactName', d.clientContactName);
+    if (d.clientContactLastName) setField('clientContactLastName', d.clientContactLastName);
+    if (d.clientSalutation)      setField('clientSalutation', d.clientSalutation);
+    if (d.clientAddress)         setField('clientAddress', d.clientAddress);
+    if (d.clientCity)            setField('clientCity', d.clientCity);
+    if (d.clientEmail)           setField('clientEmail', d.clientEmail);
+    if (d.companyProfile) {
+      const ta = document.getElementById('companyProfile');
+      ta.value = d.companyProfile; ta.classList.add('ai-filled');
+    }
+    if (d.positionDescription) {
+      const ta = document.getElementById('positionDescription');
+      ta.value = d.positionDescription; ta.classList.add('ai-filled');
+    }
+    // Overwrite list fields
+    if (d.functionalTargets?.length) {
+      document.getElementById('functionalTargets').innerHTML = '';
+      d.functionalTargets.forEach(v => addListItem('functionalTargets', '', v));
+    }
+    if (d.industryTargets?.length) {
+      document.getElementById('industryTargets').innerHTML = '';
+      d.industryTargets.forEach(v => addListItem('industryTargets', '', v));
+    }
+    if (d.geoTargets?.length) {
+      document.getElementById('geoTargets').innerHTML = '';
+      d.geoTargets.forEach(v => addListItem('geoTargets', '', v));
+    }
+
+    const filled = Object.keys(d).filter(k => d[k] && (typeof d[k]==='string' ? d[k].trim() : d[k].length)).length;
+    statusEl.innerHTML = `<div class="ok">✓ "${file.name}" analysiert — ${filled} Felder befüllt. Bitte prüfen und bei Bedarf anpassen.</div>`;
+
+    // Scroll to first filled section
+    document.getElementById('clientCompany').scrollIntoView({ behavior:'smooth', block:'center' });
+
+  } catch (err) {
+    console.error(err);
+    statusEl.innerHTML = `<div class="err">Fehler: ${err.message}</div>`;
+  } finally {
+    loading.style.display = 'none';
+    event.target.value = ''; // reset file input
+  }
+}
+
+function setField(id, value) {
+  const el = document.getElementById(id);
+  if (el && value) { el.value = value; el.classList.add('ai-filled'); }
 }
 
 // ─── AI RESEARCH & REFINE ────────────────────────────────────────────────────
