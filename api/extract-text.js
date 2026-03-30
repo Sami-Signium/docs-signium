@@ -1,5 +1,5 @@
-const pdfParse = require('pdf-parse');
-const mammoth = require('mammoth');
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } };
 
