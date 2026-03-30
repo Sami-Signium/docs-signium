@@ -2,11 +2,11 @@
 // Generates a Signium Angebot DOCX from structured input JSON
 // Deploy to: netlify/functions/generate-angebot.js
 
-const {
+import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   ImageRun, Header, AlignmentType, BorderStyle, WidthType, ShadingType,
   VerticalAlign, LevelFormat, PageBreak
-} = require('docx');
+} from 'docx';
 
 // ─── EMBEDDED IMAGES (base64) ─────────────────────────────────────────────────
 // Replace these strings with actual base64 content from img_b64_constants.json
@@ -496,12 +496,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  let input;
-  try {
-    input = req.body;
-  } catch (e) {
-    return res.status(400).json({ error: 'Invalid JSON' });
-  }
+  const input = req.body;
 
   try {
     const buffer = await buildAngebot(input);
@@ -514,4 +509,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 };
-
