@@ -1,7 +1,6 @@
 {
   "name": "docs-signium",
   "version": "1.0.0",
-  "type": "module",
   "dependencies": {
     "docx": "^9.5.3"
   }
