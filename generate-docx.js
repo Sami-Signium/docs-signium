@@ -89,6 +89,7 @@ const NEW_PAGE = [
   'VERGÜTUNG','VERGUETUNG','COMPENSATION',
   'KARRIERE','CAREER SUMMARY',
   'FACHLICHES',
+  // BEWERTUNG/PERSONALITY/MOTIVATION — kein Seitenumbruch, bleiben auf gleicher Seite wie FACHLICHES
   'BERUFSERFAHRUNG','BERUFLICHER','WORK EXPERIENCE','PROFESSIONAL EXPERIENCE'
 ];
 
@@ -126,7 +127,8 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
   if (client && client !== 'Vertraulich') parts.push(sp('Coverdate', client, 120, 120, { bold: true, sz: 32 }));
   parts.push(sp('Coverdate', datum || '', 120, 1000));
   parts.push(np('', 120));
-  parts.push(np('Dieser Vertrauliche Bericht enthält zum Teil Informationen, die uns unter Zusicherung strengster Vertraulichkeit mitgeteilt wurden. Entsprechend unseren berufsethischen Prinzipien müssen wir Sie dazu verpflichten, nur einer begrenzten Auswahl von Personen Einsicht in diese Berichte zu gewähren.', 120, undefined, { italic: true, color: '595959', sz: 18, jc: 'both' }));
+  parts.push(np('Dieser Vertrauliche Bericht enthält zum Teil Informationen, die uns unter Zusicherung strengster Vertraulichkeit mitgeteilt wurden. Entsprechend unseren berufsethischen Prinzipien müssen wir Sie dazu verpflichten, nur einer begrenzten Auswahl von Personen, die sich direkt mit der Auswertung befassen, Einsicht in diese Berichte zu gewähren.', 120, undefined, { italic: true, color: '595959', sz: 18, jc: 'both' }));
+  parts.push(np('Der Inhalt muss auch jeglichen Drittpersonen gegenüber geheim gehalten werden. Es dürfen keinerlei Referenzen ohne Zustimmung des Kandidaten oder unsererseits eingeholt werden.', 80, undefined, { italic: true, color: '595959', sz: 18, jc: 'both' }));
   parts.push(np('', 120));
 
   let vergütungInserted = false;
@@ -167,8 +169,6 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
 
     if (isVergütung) {
       vergütungInserted = true;
-      parts.push(sp('berschrift2', 'VERGÜTUNG UND VERFÜGBARKEIT', 120, undefined, { pageBreak, bold: true, sz: 28 }));
-      parts.push(hr());
       const provided = {};
       for (const line of content) {
         if (line.includes(':')) {
@@ -179,12 +179,34 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
       for (const label of ['Aktuelles Fixgehalt','Aktueller Bonus','Gehaltsvorstellung','Kündigungsfrist','Verfügbarkeit','Reisebereitschaft']) {
         parts.push(personalRow(label, provided[label] || ''));
       }
+      for (const line of content) {
+        if (!line.includes(':')) parts.push(np(line, 120, 120));
+      }
       parts.push(np('', 120));
       continue;
     }
 
     if (isKarriere) {
-      for (const line of content) parts.push(np(line, 120, 160, { bold: true }));
+      for (const line of content) {
+        const cols = line.split(/\s{2,}|\t/);
+        if (cols.length >= 2) {
+          const datum = cols[0].trim();
+          const firma = cols[1].trim();
+          const titel = cols.slice(2).join(' ').trim();
+          const titelXml = titel ? `<w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(titel)}</w:t></w:r>` : '';
+          parts.push(`<w:p>
+            <w:pPr>
+              <w:tabs><w:tab w:val="left" w:pos="1800"/><w:tab w:val="left" w:pos="5400"/></w:tabs>
+              <w:spacing w:before="120" w:after="60"/>
+            </w:pPr>
+            <w:r><w:rPr><w:color w:val="414042"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(datum)}</w:t></w:r>
+            <w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(firma)}</w:t></w:r>
+            ${titelXml}
+          </w:p>`);
+        } else {
+          parts.push(np(line, 120, 60, { bold: true }));
+        }
+      }
       parts.push(np('', 120));
       continue;
     }
@@ -302,4 +324,3 @@ export default async function handler(req, res) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
-}
