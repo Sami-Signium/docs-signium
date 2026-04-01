@@ -1,6 +1,10 @@
-const fs = require('fs');
-const path = require('path');
-const JSZip = require('jszip');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import JSZip from 'jszip';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } };
 
