@@ -142,7 +142,7 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
     const isKandidaten = ku.includes('FACHLICHES') || ku.includes('BEWERTUNG') || ku.includes('PERSONALITY') || ku.includes('KANDIDATEN') || ku.includes('MOTIVATION');
     const pageBreak    = needsPageBreak(section.key);
 
-    if (isKarriere && !vergütungInserted) {
+    if ((isKarriere || isKandidaten || isExperience) && !vergütungInserted) {
       vergütungInserted = true;
       parts.push(sp('berschrift2', 'VERGÜTUNG UND VERFÜGBARKEIT', 120, undefined, { pageBreak: true, bold: true, sz: 28 }));
       parts.push(hr());
@@ -154,15 +154,20 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
 
     if (isVergütung) {
       vergütungInserted = true;
-      if (!content.length) {
-        parts.push(sp('berschrift2', 'VERGÜTUNG UND VERFÜGBARKEIT', 120, undefined, { pageBreak, bold: true, sz: 28 }));
-        parts.push(hr());
-        for (const label of ['Aktuelles Fixgehalt','Aktueller Bonus','Gehaltsvorstellung','Kündigungsfrist','Verfügbarkeit','Reisebereitschaft']) {
-          parts.push(personalRow(label, ''));
+      parts.push(sp('berschrift2', 'VERGÜTUNG UND VERFÜGBARKEIT', 120, undefined, { pageBreak, bold: true, sz: 28 }));
+      parts.push(hr());
+      const provided = {};
+      for (const line of content) {
+        if (line.includes(':')) {
+          const idx = line.indexOf(':');
+          provided[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
         }
-        parts.push(np('', 120));
-        continue;
       }
+      for (const label of ['Aktuelles Fixgehalt','Aktueller Bonus','Gehaltsvorstellung','Kündigungsfrist','Verfügbarkeit','Reisebereitschaft']) {
+        parts.push(personalRow(label, provided[label] || ''));
+      }
+      parts.push(np('', 120));
+      continue;
     }
 
     if (!content.length) continue;
@@ -181,21 +186,6 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
       }
       parts.push(np('', 120));
       parts.push(np('', 120));
-      parts.push(np('', 120));
-      continue;
-    }
-
-    if (isVergütung) {
-      for (const line of content) {
-        if (line.includes(':')) {
-          const idx = line.indexOf(':');
-          const label = line.slice(0, idx).trim();
-          const value = line.slice(idx + 1).trim();
-          parts.push(`<w:p><w:pPr><w:spacing w:before="160" w:after="160"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(label)}: </w:t></w:r><w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(value)}</w:t></w:r></w:p>`);
-        } else {
-          parts.push(np(line, 160, 160, { bold: true }));
-        }
-      }
       parts.push(np('', 120));
       continue;
     }
@@ -256,6 +246,15 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
     parts.push(np('', 120));
   }
 
+  if (!vergütungInserted) {
+    parts.push(sp('berschrift2', 'VERGÜTUNG UND VERFÜGBARKEIT', 120, undefined, { pageBreak: true, bold: true, sz: 28 }));
+    parts.push(hr());
+    for (const label of ['Aktuelles Fixgehalt','Aktueller Bonus','Gehaltsvorstellung','Kündigungsfrist','Verfügbarkeit','Reisebereitschaft']) {
+      parts.push(personalRow(label, ''));
+    }
+    parts.push(np('', 120));
+  }
+
   parts.push(np('', 240));
   parts.push(np('Vorbereitet von: Dr. Sami Hamid  |  Managing Partner  |  Signium Austria', 120, 0, { bold: true, color: '102E66', sz: 18 }));
   parts.push(np('t +43 664 4568862  |  sami.hamid@signium.com', 40, 0, { color: '595959', sz: 17 }));
@@ -310,4 +309,4 @@ export default async function handler(req, res) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
-}Du nutzt jetzt zusätzliche Nutzung ∙ Dein Sitzungslimit wird um 10:00 zurückgesetzt
+}
