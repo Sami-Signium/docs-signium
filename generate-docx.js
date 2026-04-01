@@ -71,6 +71,18 @@ function hr() {
   return np('________________________________________________________________________________', 60, 60, { color: 'AAAAAA', sz: 16 });
 }
 
+function renderVergutung(pageBreak, provided) {
+  provided = provided || {};
+  const parts = [];
+  parts.push(sp('berschrift2', 'VERGÜTUNG UND VERFÜGBARKEIT', 120, undefined, { pageBreak, bold: true, sz: 28 }));
+  parts.push(hr());
+  for (const label of ['Aktuelles Fixgehalt','Aktueller Bonus','Gehaltsvorstellung','Kündigungsfrist','Verfügbarkeit','Reisebereitschaft']) {
+    parts.push(personalRow(label, provided[label] || ''));
+  }
+  parts.push(np('', 120));
+  return parts.join('\n');
+}
+
 const SECTION_KEYS = [
   'PERSÖNLICHE ANGABEN','PERSOENLICHE ANGABEN','PERSONAL DETAILS',
   'AUSBILDUNG UND QUALIFIKATIONEN','AUSBILDUNG','EDUCATION & QUALIFICATIONS','EDUCATION',
@@ -84,12 +96,12 @@ const SECTION_KEYS = [
   'ANMERKUNGEN ZUM WERDEGANG'
 ];
 
+// BEWERTUNG/PERSONALITY/MOTIVATION deliberately NOT in this list — no page break
 const NEW_PAGE = [
   'PERSÖNLICHE','PERSOENLICHE','PERSONAL D',
   'VERGÜTUNG','VERGUETUNG','COMPENSATION',
   'KARRIERE','CAREER SUMMARY',
   'FACHLICHES',
-  // BEWERTUNG/PERSONALITY/MOTIVATION — kein Seitenumbruch, bleiben auf gleicher Seite wie FACHLICHES
   'BERUFSERFAHRUNG','BERUFLICHER','WORK EXPERIENCE','PROFESSIONAL EXPERIENCE'
 ];
 
@@ -121,7 +133,7 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
   const sections = parseReport(reportText);
   const parts = [];
 
-  parts.push(sp('Titleheader', (candidateName || 'KANDIDAT').toUpperCase(), 120, 0, { sz: 28, color: '595959' }));
+  // COVER — no Titleheader, name comes from header on all pages
   parts.push(sp('Coverdoctitle', 'VERTRAULICHER KANDIDATENBERICHT', 4080, 0, { sz: 32 }));
   if (position) parts.push(sp('Coverdate', position.toUpperCase(), 720, 1000, { bold: true, sz: 28 }));
   if (client && client !== 'Vertraulich') parts.push(sp('Coverdate', client, 120, 120, { bold: true, sz: 32 }));
@@ -131,25 +143,43 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
   parts.push(np('Der Inhalt muss auch jeglichen Drittpersonen gegenüber geheim gehalten werden. Es dürfen keinerlei Referenzen ohne Zustimmung des Kandidaten oder unsererseits eingeholt werden.', 80, undefined, { italic: true, color: '595959', sz: 18, jc: 'both' }));
   parts.push(np('', 120));
 
-  let vergütungInserted = false;
+  let vergutungDone = false;
 
   for (const section of sections) {
     if (section.key === 'HEADER') continue;
     const content = section.lines.map(l => l.trim()).filter(Boolean);
-
     const ku = section.key.toUpperCase();
+
     const isPersonal   = ku.includes('PERSÖN') || ku.includes('PERSOEN') || ku.includes('PERSONAL');
-    const isExperience = ku.includes('BERUFSERFAHRUNG') || ku.includes('BERUFLICHER') || ku.includes('WORK EXPERIENCE') || ku.includes('PROFESSIONAL EXPERIENCE');
+    const isVergutung  = ku.includes('VERGÜTUNG') || ku.includes('VERGUETUNG') || ku.includes('COMPENSATION');
     const isKarriere   = ku.includes('KARRIERE') || ku.includes('CAREER SUMMARY');
-    const isVergütung  = ku.includes('VERGÜTUNG') || ku.includes('VERGUETUNG') || ku.includes('COMPENSATION');
     const isKandidaten = ku.includes('FACHLICHES') || ku.includes('BEWERTUNG') || ku.includes('PERSONALITY') || ku.includes('KANDIDATEN') || ku.includes('MOTIVATION');
+    const isExperience = ku.includes('BERUFSERFAHRUNG') || ku.includes('BERUFLICHER') || ku.includes('WORK EXPERIENCE') || ku.includes('PROFESSIONAL EXPERIENCE');
     const pageBreak    = needsPageBreak(section.key);
 
-    if (isVergütung && content.length) vergütungInserted = true;
+    // Inject Vergütung before Karriere/Kandidaten/Experience if not yet done
+    if ((isKarriere || isKandidaten || isExperience) && !vergutungDone) {
+      vergutungDone = true;
+      parts.push(renderVergutung(true, {}));
+    }
+
+    if (isVergutung) {
+      vergutungDone = true;
+      const provided = {};
+      for (const line of content) {
+        if (line.includes(':')) {
+          const idx = line.indexOf(':');
+          provided[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+        }
+      }
+      parts.push(renderVergutung(true, provided));
+      continue;
+    }
 
     if (!content.length) continue;
 
-    parts.push(sp('berschrift2', section.key.toUpperCase(), 120, undefined, { pageBreak, bold: true, sz: 28 }));
+    // Section heading — explicit pageBreak control, never inherit from style
+    parts.push(`<w:p><w:pPr><w:pStyle w:val="berschrift2"/>${pageBreak ? '<w:pageBreakBefore/>' : '<w:pageBreakBefore w:val="0"/>'}<w:spacing w:before="120"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t xml:space="preserve">${xe(section.key.toUpperCase())}</w:t></w:r></w:p>`);
     parts.push(hr());
 
     if (isPersonal) {
@@ -167,42 +197,15 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
       continue;
     }
 
-    if (isVergütung) {
-      vergütungInserted = true;
-      const provided = {};
-      for (const line of content) {
-        if (line.includes(':')) {
-          const idx = line.indexOf(':');
-          provided[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-        }
-      }
-      for (const label of ['Aktuelles Fixgehalt','Aktueller Bonus','Gehaltsvorstellung','Kündigungsfrist','Verfügbarkeit','Reisebereitschaft']) {
-        parts.push(personalRow(label, provided[label] || ''));
-      }
-      for (const line of content) {
-        if (!line.includes(':')) parts.push(np(line, 120, 120));
-      }
-      parts.push(np('', 120));
-      continue;
-    }
-
     if (isKarriere) {
       for (const line of content) {
         const cols = line.split(/\s{2,}|\t/);
         if (cols.length >= 2) {
-          const datum = cols[0].trim();
-          const firma = cols[1].trim();
-          const titel = cols.slice(2).join(' ').trim();
-          const titelXml = titel ? `<w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(titel)}</w:t></w:r>` : '';
-          parts.push(`<w:p>
-            <w:pPr>
-              <w:tabs><w:tab w:val="left" w:pos="1800"/><w:tab w:val="left" w:pos="5400"/></w:tabs>
-              <w:spacing w:before="120" w:after="60"/>
-            </w:pPr>
-            <w:r><w:rPr><w:color w:val="414042"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(datum)}</w:t></w:r>
-            <w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(firma)}</w:t></w:r>
-            ${titelXml}
-          </w:p>`);
+          const d = cols[0].trim();
+          const f = cols[1].trim();
+          const t = cols.slice(2).join(' ').trim();
+          const tXml = t ? `<w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(t)}</w:t></w:r>` : '';
+          parts.push(`<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="1800"/><w:tab w:val="left" w:pos="5400"/></w:tabs><w:spacing w:before="120" w:after="60"/></w:pPr><w:r><w:rPr><w:color w:val="414042"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(d)}</w:t></w:r><w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(f)}</w:t></w:r>${tXml}</w:p>`);
         } else {
           parts.push(np(line, 120, 60, { bold: true }));
         }
@@ -257,17 +260,14 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
       continue;
     }
 
+    // Default (Ausbildung etc.)
     for (const line of content) parts.push(np(line, 120, 120, { jc: 'both' }));
     parts.push(np('', 120));
   }
 
-  if (!vergütungInserted) {
-    parts.push(sp('berschrift2', 'VERGÜTUNG UND VERFÜGBARKEIT', 120, undefined, { pageBreak: true, bold: true, sz: 28 }));
-    parts.push(hr());
-    for (const label of ['Aktuelles Fixgehalt','Aktueller Bonus','Gehaltsvorstellung','Kündigungsfrist','Verfügbarkeit','Reisebereitschaft']) {
-      parts.push(personalRow(label, ''));
-    }
-    parts.push(np('', 120));
+  // Inject Vergütung at end if never triggered
+  if (!vergutungDone) {
+    parts.push(renderVergutung(true, {}));
   }
 
   parts.push(np('', 240));
@@ -324,3 +324,4 @@ export default async function handler(req, res) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
+}
