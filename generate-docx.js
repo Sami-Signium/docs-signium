@@ -205,9 +205,9 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
           const f = cols[1].trim();
           const t = cols.slice(2).join(' ').trim();
           const tXml = t ? `<w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(t)}</w:t></w:r>` : '';
-          parts.push(`<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="1800"/><w:tab w:val="left" w:pos="5400"/></w:tabs><w:spacing w:before="120" w:after="60"/></w:pPr><w:r><w:rPr><w:color w:val="414042"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(d)}</w:t></w:r><w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(f)}</w:t></w:r>${tXml}</w:p>`);
+          parts.push(`<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="1800"/><w:tab w:val="left" w:pos="5400"/></w:tabs><w:spacing w:before="120" w:after="60"/></w:pPr><w:r><w:rPr><w:color w:val="414042"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(d)}</w:t></w:r><w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(f)}</w:t></w:r>${tXml}</w:p>`);
         } else {
-          parts.push(np(line, 120, 60, { bold: true }));
+          parts.push(np(line, 120, 60));
         }
       }
       parts.push(np('', 120));
