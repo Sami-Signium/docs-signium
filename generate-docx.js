@@ -13,7 +13,6 @@ function xe(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Named style paragraph
 function sp(styleId, text, before, after, opts) {
   opts = opts || {};
   let ppr = `<w:pStyle w:val="${styleId}"/>`;
@@ -31,7 +30,6 @@ function sp(styleId, text, before, after, opts) {
   return `<w:p><w:pPr>${ppr}</w:pPr><w:r>${rpr}<w:t xml:space="preserve">${xe(text)}</w:t></w:r></w:p>`;
 }
 
-// Normal paragraph
 function np(text, before, after, opts) {
   opts = opts || {};
   let ppr = '';
@@ -53,13 +51,9 @@ function np(text, before, after, opts) {
   return `<w:p><w:pPr>${ppr}</w:pPr><w:r>${rpr}<w:t xml:space="preserve">${xe(text)}</w:t></w:r></w:p>`;
 }
 
-// Personal details row — uses a proper tab stop at 2200 DXA.
-// Long values (e.g. Sprachen) get a hanging indent so wrap aligns under the value.
 function personalRow(label, value) {
   const isLong = value && value.length > 60;
-  const indXml = isLong
-    ? '<w:ind w:left="2200" w:hanging="2200"/>'
-    : '';
+  const indXml = isLong ? '<w:ind w:left="2200" w:hanging="2200"/>' : '';
   return `<w:p>
     <w:pPr>
       <w:tabs><w:tab w:val="left" w:pos="2200"/></w:tabs>
@@ -72,7 +66,6 @@ function personalRow(label, value) {
   </w:p>`;
 }
 
-// Horizontal rule
 function hr() {
   return np('________________________________________________________________________________', 60, 60, { color: 'AAAAAA', sz: 16 });
 }
@@ -94,7 +87,7 @@ const NEW_PAGE = [
   'PERSÖNLICHE','PERSOENLICHE','PERSONAL D',
   'VERGÜTUNG','VERGUETUNG','COMPENSATION',
   'KARRIERE','CAREER SUMMARY',
-  'FACHLICHES','BEWERTUNG','PERSONALITY',
+  'FACHLICHES',
   'BERUFSERFAHRUNG','BERUFLICHER','WORK EXPERIENCE','PROFESSIONAL EXPERIENCE'
 ];
 
@@ -126,7 +119,6 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
   const sections = parseReport(reportText);
   const parts = [];
 
-  // ── COVER ──
   parts.push(sp('Titleheader', (candidateName || 'KANDIDAT').toUpperCase(), 120, 0));
   parts.push(sp('Coverdoctitle', 'VERTRAULICHER KANDIDATENBERICHT', 4080, 0, { sz: 32 }));
   if (position) parts.push(sp('Coverdate', position.toUpperCase(), 720, 1000, { bold: true, sz: 28 }));
@@ -136,52 +128,70 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
   parts.push(np('Dieser Vertrauliche Bericht enthält zum Teil Informationen, die uns unter Zusicherung strengster Vertraulichkeit mitgeteilt wurden. Entsprechend unseren berufsethischen Prinzipien müssen wir Sie dazu verpflichten, nur einer begrenzten Auswahl von Personen Einsicht in diese Berichte zu gewähren.', 120, undefined, { italic: true, color: '595959', sz: 18, jc: 'both' }));
   parts.push(np('', 120));
 
-  // ── SECTIONS ──
+  let vergütungInserted = false;
+
   for (const section of sections) {
     if (section.key === 'HEADER') continue;
     const content = section.lines.map(l => l.trim()).filter(Boolean);
-    if (!content.length) continue;
 
     const ku = section.key.toUpperCase();
-    const isPersonal    = ku.includes('PERSÖN') || ku.includes('PERSOEN') || ku.includes('PERSONAL');
-    const isExperience  = ku.includes('BERUFSERFAHRUNG') || ku.includes('BERUFLICHER') || ku.includes('WORK EXPERIENCE') || ku.includes('PROFESSIONAL EXPERIENCE');
-    const isKarriere    = ku.includes('KARRIERE') || ku.includes('CAREER SUMMARY');
-    const isVergütung   = ku.includes('VERGÜTUNG') || ku.includes('VERGUETUNG') || ku.includes('COMPENSATION');
-    const isKandidaten  = ku.includes('FACHLICHES') || ku.includes('BEWERTUNG') || ku.includes('PERSONALITY') || ku.includes('KANDIDATEN') || ku.includes('MOTIVATION');
-    const pageBreak     = needsPageBreak(section.key);
+    const isPersonal   = ku.includes('PERSÖN') || ku.includes('PERSOEN') || ku.includes('PERSONAL');
+    const isExperience = ku.includes('BERUFSERFAHRUNG') || ku.includes('BERUFLICHER') || ku.includes('WORK EXPERIENCE') || ku.includes('PROFESSIONAL EXPERIENCE');
+    const isKarriere   = ku.includes('KARRIERE') || ku.includes('CAREER SUMMARY');
+    const isVergütung  = ku.includes('VERGÜTUNG') || ku.includes('VERGUETUNG') || ku.includes('COMPENSATION');
+    const isKandidaten = ku.includes('FACHLICHES') || ku.includes('BEWERTUNG') || ku.includes('PERSONALITY') || ku.includes('KANDIDATEN') || ku.includes('MOTIVATION');
+    const pageBreak    = needsPageBreak(section.key);
 
-    // Section heading
+    if (isKarriere && !vergütungInserted) {
+      vergütungInserted = true;
+      parts.push(sp('berschrift2', 'VERGÜTUNG UND VERFÜGBARKEIT', 120, undefined, { pageBreak: true, bold: true, sz: 28 }));
+      parts.push(hr());
+      for (const label of ['Aktuelles Fixgehalt','Aktueller Bonus','Gehaltsvorstellung','Kündigungsfrist','Verfügbarkeit','Reisebereitschaft']) {
+        parts.push(personalRow(label, ''));
+      }
+      parts.push(np('', 120));
+    }
+
+    if (isVergütung) {
+      vergütungInserted = true;
+      if (!content.length) {
+        parts.push(sp('berschrift2', 'VERGÜTUNG UND VERFÜGBARKEIT', 120, undefined, { pageBreak, bold: true, sz: 28 }));
+        parts.push(hr());
+        for (const label of ['Aktuelles Fixgehalt','Aktueller Bonus','Gehaltsvorstellung','Kündigungsfrist','Verfügbarkeit','Reisebereitschaft']) {
+          parts.push(personalRow(label, ''));
+        }
+        parts.push(np('', 120));
+        continue;
+      }
+    }
+
+    if (!content.length) continue;
+
     parts.push(sp('berschrift2', section.key.toUpperCase(), 120, undefined, { pageBreak, bold: true, sz: 28 }));
     parts.push(hr());
 
-    // ── PERSONAL DETAILS ──
     if (isPersonal) {
       for (const line of content) {
         if (line.includes(':')) {
           const idx = line.indexOf(':');
-          const label = line.slice(0, idx).trim();
-          const value = line.slice(idx + 1).trim();
-          parts.push(personalRow(label, value));
+          parts.push(personalRow(line.slice(0, idx).trim(), line.slice(idx + 1).trim()));
         } else {
           parts.push(np(line, 80, 80));
         }
       }
       parts.push(np('', 120));
+      parts.push(np('', 120));
+      parts.push(np('', 120));
       continue;
     }
 
-    // ── VERGÜTUNG ──
     if (isVergütung) {
       for (const line of content) {
         if (line.includes(':')) {
           const idx = line.indexOf(':');
           const label = line.slice(0, idx).trim();
           const value = line.slice(idx + 1).trim();
-          parts.push(`<w:p>
-            <w:pPr><w:spacing w:before="160" w:after="160"/></w:pPr>
-            <w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(label)}: </w:t></w:r>
-            <w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(value)}</w:t></w:r>
-          </w:p>`);
+          parts.push(`<w:p><w:pPr><w:spacing w:before="160" w:after="160"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(label)}: </w:t></w:r><w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(value)}</w:t></w:r></w:p>`);
         } else {
           parts.push(np(line, 160, 160, { bold: true }));
         }
@@ -190,16 +200,12 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
       continue;
     }
 
-    // ── KARRIERE ZUSAMMENFASSUNG ──
     if (isKarriere) {
-      for (const line of content) {
-        parts.push(np(line, 120, 160, { bold: true }));
-      }
+      for (const line of content) parts.push(np(line, 120, 160, { bold: true }));
       parts.push(np('', 120));
       continue;
     }
 
-    // ── FACHLICHES / BEWERTUNG / KANDIDATEN ──
     if (isKandidaten) {
       for (const line of content) {
         if (!line.trim()) continue;
@@ -213,32 +219,23 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
       continue;
     }
 
-    // ── BERUFSERFAHRUNG ──
     if (isExperience) {
       let firstCompany = true;
-      let i = 0;
-      while (i < content.length) {
+      for (let i = 0; i < content.length; i++) {
         const line = content[i];
-        const isBullet      = /^[-–•]/.test(line);
+        const isBullet = /^[-–•]/.test(line);
         const isCompanyDesc = /^\*/.test(line);
         const isCompanyHeader = /^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan\.|Feb\.|Mär\.|Apr\.|Jun\.|Jul\.|Aug\.|Sep\.|Okt\.|Nov\.|Dez\.|Oct\.|Sept?\.|Jan\s|Feb\s|\d{2}\/\d{4}|\d{4})/.test(line) && !isBullet;
-
         if (isCompanyHeader) {
           if (!firstCompany) parts.push(hr());
           firstCompany = false;
           const colonIdx = line.indexOf(':');
-          const dashIdx  = line.indexOf(' - ', 8);
-          let datePart    = line;
-          let companyPart = '';
-          if (colonIdx > 0)      { datePart = line.slice(0, colonIdx).trim(); companyPart = line.slice(colonIdx + 1).trim(); }
-          else if (dashIdx > 0)  { datePart = line.slice(0, dashIdx).trim();  companyPart = line.slice(dashIdx + 3).trim(); }
-
+          const dashIdx = line.indexOf(' - ', 8);
+          let datePart = line, companyPart = '';
+          if (colonIdx > 0) { datePart = line.slice(0, colonIdx).trim(); companyPart = line.slice(colonIdx + 1).trim(); }
+          else if (dashIdx > 0) { datePart = line.slice(0, dashIdx).trim(); companyPart = line.slice(dashIdx + 3).trim(); }
           if (companyPart) {
-            parts.push(`<w:p>
-              <w:pPr><w:pStyle w:val="Amrop-header"/><w:spacing w:before="120" w:after="120"/></w:pPr>
-              <w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(datePart)}: </w:t></w:r>
-              <w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t xml:space="preserve">${xe(companyPart)}</w:t></w:r>
-            </w:p>`);
+            parts.push(`<w:p><w:pPr><w:pStyle w:val="Amrop-header"/><w:spacing w:before="120" w:after="120"/></w:pPr><w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(datePart)}: </w:t></w:r><w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t xml:space="preserve">${xe(companyPart)}</w:t></w:r></w:p>`);
           } else {
             parts.push(sp('Amrop-header', line, 120, 120, { sz: 22 }));
           }
@@ -250,20 +247,15 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
         } else if (line.trim()) {
           parts.push(np(line, 120, 120, { bold: true, sz: 24 }));
         }
-        i++;
       }
       parts.push(np('', 120));
       continue;
     }
 
-    // ── DEFAULT (Ausbildung etc.) ──
-    for (const line of content) {
-      parts.push(np(line, 120, 120, { jc: 'both' }));
-    }
+    for (const line of content) parts.push(np(line, 120, 120, { jc: 'both' }));
     parts.push(np('', 120));
   }
 
-  // ── FOOTER ──
   parts.push(np('', 240));
   parts.push(np('Vorbereitet von: Dr. Sami Hamid  |  Managing Partner  |  Signium Austria', 120, 0, { bold: true, color: '102E66', sz: 18 }));
   parts.push(np('t +43 664 4568862  |  sami.hamid@signium.com', 40, 0, { color: '595959', sz: 17 }));
@@ -271,33 +263,20 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
   return parts.join('\n');
 }
 
-// Replace placeholder strings in header/footer XMLs with actual candidate data.
-// The template may contain any name/position/company — we replace whatever is there.
 async function updateHeaders(zip, candidateName, position, client) {
   for (const hf of ['word/header1.xml','word/header2.xml','word/header3.xml','word/footer1.xml','word/footer2.xml','word/footer3.xml']) {
     const file = zip.file(hf);
     if (!file) continue;
     let xml = await file.async('string');
-
-    // Replace candidate name: find any text between the name-placeholder tags
-    // Strategy: replace the previous candidate name (from template) with the new one.
-    // We look for the stored placeholder strings AND any prior substitution.
-    // Safest approach: replace ALL text content in the left header cell with new values.
-
-    // Replace known template placeholders (original template values)
     xml = xml.replace(/Quintin Stephen/g, xe(candidateName || ''));
     xml = xml.replace(/Dr\. Sami Hamid(?!\s*\|)/g, xe(candidateName || ''));
     xml = xml.replace(/Director of Identity &amp; Authentication/g, xe(position || ''));
     xml = xml.replace(/Director of Identity &amp;amp; Authentication/g, xe(position || ''));
     xml = xml.replace(/Austriacard(?!\s*Holdings)/g, xe(client && client !== 'Vertraulich' ? client : 'Confidential'));
     xml = xml.replace(/AustriaCard Holdings[^<]*/g, xe(candidateName || ''));
-
-    // Also replace "Managing Partner" in header context with position if provided
-    // (only if it appears as a standalone header line, not in footer credit)
     if (position) {
       xml = xml.replace(/(<w:t[^>]*>)Managing Partner(<\/w:t>)/g, `$1${xe(position)}$2`);
     }
-
     zip.file(hf, xml);
   }
 }
@@ -308,44 +287,27 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-
   try {
     const { text, candidateName, position, client, datum } = req.body;
     if (!text) return res.status(400).json({ error: 'No text provided' });
-
     const templatePath = path.join(process.cwd(), 'template.docx');
     const templateBuffer = fs.readFileSync(templatePath);
     const zip = await JSZip.loadAsync(templateBuffer);
-
     await updateHeaders(zip, candidateName, position, client);
-
     const docXmlRaw = await zip.file('word/document.xml').async('string');
     const bodyStart = docXmlRaw.indexOf('<w:body>') + '<w:body>'.length;
     const bodyEnd = docXmlRaw.lastIndexOf('</w:body>');
     const sectPrMatch = docXmlRaw.match(/<w:sectPr[\s\S]*?<\/w:sectPr>/);
     const sectPr = sectPrMatch ? sectPrMatch[0] : '';
-
-    const newDocXml =
-      docXmlRaw.substring(0, bodyStart) + '\n' +
-      buildBodyXml(text, candidateName, position, client, datum) + '\n' +
-      sectPr + '\n' +
-      docXmlRaw.substring(bodyEnd);
-
+    const newDocXml = docXmlRaw.substring(0, bodyStart) + '\n' + buildBodyXml(text, candidateName, position, client, datum) + '\n' + sectPr + '\n' + docXmlRaw.substring(bodyEnd);
     zip.file('word/document.xml', newDocXml);
-
-    const outputBuffer = await zip.generateAsync({
-      type: 'nodebuffer',
-      compression: 'DEFLATE',
-      compressionOptions: { level: 6 }
-    });
-
+    const outputBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
     const safeName = (candidateName || 'Kandidat').replace(/\s+/g, '_');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${safeName}_Signium_Bericht.docx"`);
     res.send(outputBuffer);
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
-}
+}Du nutzt jetzt zusätzliche Nutzung ∙ Dein Sitzungslimit wird um 10:00 zurückgesetzt
