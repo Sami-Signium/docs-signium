@@ -7,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } };
+// v2 - no Titleheader - 2026-04-01
 
 function xe(str) {
   if (!str) return '';
