@@ -1,35 +1,36 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import JSZip from 'jszip';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } };
-// v2 - no Titleheader - 2026-04-01
 
 function xe(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function sp(styleId, text, before, after, opts) {
+function rpr(opts) {
   opts = opts || {};
-  let ppr = `<w:pStyle w:val="${styleId}"/>`;
-  if (opts.pageBreak) ppr += `<w:pageBreakBefore/>`;
-  if (before !== undefined || after !== undefined) {
-    const b = before !== undefined ? ` w:before="${before}"` : '';
-    const a = after !== undefined ? ` w:after="${after}"` : '';
-    ppr += `<w:spacing${b}${a}/>`;
+  let x = '<w:rPr>';
+  if (opts.major) {
+    x += '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>';
+  } else {
+    x += '<w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi" w:cstheme="minorHAnsi"/>';
   }
-  if (!text && text !== 0) return `<w:p><w:pPr>${ppr}</w:pPr></w:p>`;
-  const rColor = opts.color || 'auto';
-  let rpr = `<w:rPr><w:color w:val="${rColor}"/>`;
-  if (opts.bold) rpr += '<w:b/>';
-  if (opts.sz) rpr += `<w:sz w:val="${opts.sz}"/><w:szCs w:val="${opts.sz}"/>`;
-  rpr += '</w:rPr>';
-  return `<w:p><w:pPr>${ppr}</w:pPr><w:r>${rpr}<w:t xml:space="preserve">${xe(text)}</w:t></w:r></w:p>`;
+  if (opts.bold) x += '<w:b/>';
+  if (opts.italic) x += '<w:i/>';
+  const color = opts.color || '414042';
+  x += `<w:color w:val="${color}"/>`;
+  const sz = opts.sz || 22;
+  x += `<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`;
+  x += '</w:rPr>';
+  return x;
+}
+
+function run(text, opts) {
+  return `<w:r>${rpr(opts)}<w:t xml:space="preserve">${xe(text)}</w:t></w:r>`;
 }
 
 function np(text, before, after, opts) {
@@ -41,74 +42,98 @@ function np(text, before, after, opts) {
     ppr += `<w:spacing${b}${a}/>`;
   }
   if (opts.jc) ppr += `<w:jc w:val="${opts.jc}"/>`;
-  let rpr = `<w:rPr>`;
-  if (opts.bold) rpr += '<w:b/>';
-  if (opts.italic) rpr += '<w:i/>';
-  const color = opts.color || 'auto';
-  rpr += `<w:color w:val="${color}"/>`;
-  const sz = opts.sz || 22;
-  rpr += `<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`;
-  rpr += '</w:rPr>';
   if (!text && text !== 0) return `<w:p><w:pPr>${ppr}</w:pPr></w:p>`;
-  return `<w:p><w:pPr>${ppr}</w:pPr><w:r>${rpr}<w:t xml:space="preserve">${xe(text)}</w:t></w:r></w:p>`;
+  return `<w:p><w:pPr>${ppr}</w:pPr>${run(text, opts)}</w:p>`;
 }
 
+// FIX: Echter Tab-Stop bei 2800 DXA + haengender Einzug fuer Folgezeilen (z.B. lange Sprachen-Zeile)
 function personalRow(label, value) {
-  const isLong = value && value.length > 60;
-  const indXml = isLong ? '<w:ind w:left="2200" w:hanging="2200"/>' : '';
+  const labelRpr = rpr({ sz: 22, color: '414042' });
+  const valueRpr = rpr({ sz: 22, color: '262626' });
   return `<w:p>
     <w:pPr>
-      <w:tabs><w:tab w:val="left" w:pos="2200"/></w:tabs>
+      <w:pStyle w:val="SPTBodytext66"/>
+      <w:tabs><w:tab w:val="left" w:pos="2800"/></w:tabs>
+      <w:ind w:left="2800" w:hanging="2800"/>
       <w:spacing w:before="80" w:after="80"/>
-      ${indXml}
     </w:pPr>
-    <w:r><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi" w:cstheme="minorHAnsi"/><w:color w:val="414042"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t>${xe(label)}</w:t></w:r>
-    <w:r><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi" w:cstheme="minorHAnsi"/><w:color w:val="414042"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/></w:r>
-    <w:r><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi" w:cstheme="minorHAnsi"/><w:color w:val="262626"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(value)}</w:t></w:r>
+    <w:r>${labelRpr}<w:t xml:space="preserve">${xe(label)}</w:t></w:r>
+    <w:r><w:rPr><w:color w:val="414042"/></w:rPr><w:tab/></w:r>
+    <w:r>${valueRpr}<w:t xml:space="preserve">${xe(value)}</w:t></w:r>
   </w:p>`;
 }
 
 function hr() {
-  return np('________________________________________________________________________________', 60, 60, { color: 'AAAAAA', sz: 16 });
+  return np('________________________________________________________________________________', 60, 60, { color: 'CCCCCC', sz: 16 });
 }
 
-function renderVergutung(pageBreak, provided) {
-  provided = provided || {};
-  const parts = [];
-  parts.push(sp('berschrift2', 'VERGÜTUNG UND VERFÜGBARKEIT', 120, undefined, { pageBreak, bold: true, sz: 28 }));
-  parts.push(hr());
-  for (const label of ['Aktuelles Fixgehalt','Aktueller Bonus','Gehaltsvorstellung','Kündigungsfrist','Verfügbarkeit','Reisebereitschaft']) {
-    parts.push(personalRow(label, provided[label] || ''));
+function bullet(text, before, after) {
+  const spacing = `<w:spacing w:before="${before||60}" w:after="${after||120}"/>`;
+  const r = rpr({ sz: 24, color: '262626' });
+  return `<w:p>
+    <w:pPr>
+      <w:pStyle w:val="Listenabsatz"/>
+      <w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>
+      ${spacing}
+      ${rpr({ sz: 24, color: '262626' })}
+    </w:pPr>
+    <w:r>${r}<w:t xml:space="preserve">${xe(text)}</w:t></w:r>
+  </w:p>`;
+}
+
+function companyHeader(datePart, companyPart, before, after) {
+  const dateRpr = rpr({ sz: 22, color: '414042' });
+  const companyRpr = rpr({ sz: 28, color: '262626', bold: true });
+  let ppr = `<w:pStyle w:val="Amrop-header"/>`;
+  ppr += `<w:spacing w:before="${before||120}" w:after="${after||120}"/>`;
+  ppr += rpr({ sz: 22, color: '414042' });
+  if (companyPart) {
+    return `<w:p><w:pPr>${ppr}</w:pPr>
+      <w:r>${dateRpr}<w:t xml:space="preserve">${xe(datePart)}: </w:t><w:tab/></w:r>
+      <w:r>${companyRpr}<w:t xml:space="preserve">${xe(companyPart)}</w:t></w:r>
+    </w:p>`;
   }
-  parts.push(np('', 120));
-  return parts.join('\n');
+  return `<w:p><w:pPr>${ppr}</w:pPr>
+    <w:r>${dateRpr}<w:t xml:space="preserve">${xe(datePart)}</w:t></w:r>
+  </w:p>`;
+}
+
+// FIX: pageBreakBefore w:val="0" explizit wenn kein Break gewuenscht
+function sectionHead(text, pageBreak) {
+  let ppr = `<w:pStyle w:val="berschrift2"/>`;
+  if (pageBreak) {
+    ppr += `<w:pageBreakBefore/>`;
+  } else {
+    ppr += `<w:pageBreakBefore w:val="0"/>`;
+  }
+  ppr += `<w:spacing w:before="120"/>`;
+  const r = rpr({ major: true, bold: true, sz: 28, color: '102E66' });
+  ppr += r;
+  return `<w:p><w:pPr>${ppr}</w:pPr><w:r>${r}<w:t xml:space="preserve">${xe(text)}</w:t></w:r></w:p>`;
 }
 
 const SECTION_KEYS = [
-  'PERSÖNLICHE ANGABEN','PERSOENLICHE ANGABEN','PERSONAL DETAILS',
+  'PERSOENLICHE ANGABEN','PERSONAL DETAILS',
   'AUSBILDUNG UND QUALIFIKATIONEN','AUSBILDUNG','EDUCATION & QUALIFICATIONS','EDUCATION',
-  'VERGÜTUNG UND VERFÜGBARKEIT','VERGUETUNG','COMPENSATION & AVAILABILITY','COMPENSATION',
+  'VERGUETUNG UND VERFUEGBARKEIT','VERGUETUNG','COMPENSATION & AVAILABILITY','COMPENSATION',
   'KARRIERE ZUSAMMENFASSUNG','CAREER SUMMARY',
   'KANDIDATENBEWERTUNG','CANDIDATE ASSESSMENT','CANDIDATE EVALUATION',
-  'FACHLICHES RESÜMEE','FACHLICHES RESUME','PROFESSIONAL SUMMARY',
-  'BEWERTUNG','PERSONALITY','PERSÖNLICHKEIT',
+  'FACHLICHES RESUEMEE','PROFESSIONAL SUMMARY',
+  'BEWERTUNG','PERSONALITY',
   'BEWERBERMOTIVATION','MOTIVATION','KANDIDATENMOTIVATION',
   'BERUFSERFAHRUNG','BERUFLICHER WERDEGANG','WORK EXPERIENCE','PROFESSIONAL EXPERIENCE',
   'ANMERKUNGEN ZUM WERDEGANG'
 ];
 
-// BEWERTUNG/PERSONALITY/MOTIVATION deliberately NOT in this list — no page break
-const NEW_PAGE = [
-  'PERSÖNLICHE','PERSOENLICHE','PERSONAL D',
-  'VERGÜTUNG','VERGUETUNG','COMPENSATION',
-  'KARRIERE','CAREER SUMMARY',
-  'FACHLICHES',
-  'BERUFSERFAHRUNG','BERUFLICHER','WORK EXPERIENCE','PROFESSIONAL EXPERIENCE'
-];
-
 function needsPageBreak(key) {
   const u = key.toUpperCase();
-  return NEW_PAGE.some(k => u.startsWith(k));
+  if (u.includes('PERS') && (u.includes('NLICH') || u.includes('ONAL'))) return true;
+  if (u.includes('VERG') || u.includes('COMPENSATION')) return true;
+  if (u.includes('KARRIERE') || u.includes('CAREER')) return true;
+  if (u.includes('FACHLICH') || u.includes('PROFESSIONAL SUMMARY')) return true;
+  if (u.includes('BEWERTUNG') || u.includes('PERSONALITY')) return true;
+  if (u.includes('BERUFS') || u.includes('BERUFLICHER') || u.includes('WORK EXP') || u.includes('PROFESSIONAL EXP')) return true;
+  return false;
 }
 
 function parseReport(raw) {
@@ -134,53 +159,33 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
   const sections = parseReport(reportText);
   const parts = [];
 
-  // COVER — no Titleheader, name comes from header on all pages
-  parts.push(sp('Coverdoctitle', 'VERTRAULICHER KANDIDATENBERICHT', 4080, 0, { sz: 32 }));
-  if (position) parts.push(sp('Coverdate', position.toUpperCase(), 720, 1000, { bold: true, sz: 28 }));
-  if (client && client !== 'Vertraulich') parts.push(sp('Coverdate', client, 120, 120, { bold: true, sz: 32 }));
-  parts.push(sp('Coverdate', datum || '', 120, 1000));
-  parts.push(np('', 120));
-  parts.push(np('Dieser Vertrauliche Bericht enthält zum Teil Informationen, die uns unter Zusicherung strengster Vertraulichkeit mitgeteilt wurden. Entsprechend unseren berufsethischen Prinzipien müssen wir Sie dazu verpflichten, nur einer begrenzten Auswahl von Personen, die sich direkt mit der Auswertung befassen, Einsicht in diese Berichte zu gewähren.', 120, undefined, { italic: true, color: '595959', sz: 18, jc: 'both' }));
-  parts.push(np('Der Inhalt muss auch jeglichen Drittpersonen gegenüber geheim gehalten werden. Es dürfen keinerlei Referenzen ohne Zustimmung des Kandidaten oder unsererseits eingeholt werden.', 80, undefined, { italic: true, color: '595959', sz: 18, jc: 'both' }));
-  parts.push(np('', 120));
 
-  let vergutungDone = false;
+  parts.push(`<w:p><w:pPr><w:pStyle w:val="Coverdoctitle"/><w:spacing w:before="4080" w:after="0"/></w:pPr>
+    ${run('VERTRAULICHER KANDIDATENBERICHT', { sz: 32, color: '102E66' })}</w:p>`);
+  if (position) parts.push(`<w:p><w:pPr><w:pStyle w:val="Coverdate"/><w:spacing w:before="720" w:after="1000"/></w:pPr>
+    ${run(position.toUpperCase(), { major: true, bold: true, sz: 28, color: '414042' })}</w:p>`);
+  if (client && client !== 'Vertraulich') parts.push(`<w:p><w:pPr><w:pStyle w:val="Coverdate"/><w:spacing w:before="120" w:after="120"/></w:pPr>
+    ${run(client, { major: true, bold: true, sz: 32, color: '414042' })}</w:p>`);
+  parts.push(`<w:p><w:pPr><w:pStyle w:val="Coverdate"/><w:spacing w:before="120" w:after="1000"/></w:pPr>
+    ${run(datum || '', { sz: 22, color: '414042' })}</w:p>`);
+  parts.push(np('', 120));
+  parts.push(np('Dieser Vertrauliche Bericht enthaelt zum Teil Informationen, die uns unter Zusicherung strengster Vertraulichkeit mitgeteilt wurden.', 120, undefined, { italic: true, color: '595959', sz: 18, jc: 'both' }));
+  parts.push(np('', 120));
 
   for (const section of sections) {
     if (section.key === 'HEADER') continue;
     const content = section.lines.map(l => l.trim()).filter(Boolean);
-    const ku = section.key.toUpperCase();
-
-    const isPersonal   = ku.includes('PERSÖN') || ku.includes('PERSOEN') || ku.includes('PERSONAL');
-    const isVergutung  = ku.includes('VERGÜTUNG') || ku.includes('VERGUETUNG') || ku.includes('COMPENSATION');
-    const isKarriere   = ku.includes('KARRIERE') || ku.includes('CAREER SUMMARY');
-    const isKandidaten = ku.includes('FACHLICHES') || ku.includes('BEWERTUNG') || ku.includes('PERSONALITY') || ku.includes('KANDIDATEN') || ku.includes('MOTIVATION');
-    const isExperience = ku.includes('BERUFSERFAHRUNG') || ku.includes('BERUFLICHER') || ku.includes('WORK EXPERIENCE') || ku.includes('PROFESSIONAL EXPERIENCE');
-    const pageBreak    = needsPageBreak(section.key);
-
-    // Inject Vergütung before Karriere/Kandidaten/Experience if not yet done
-    if ((isKarriere || isKandidaten || isExperience) && !vergutungDone) {
-      vergutungDone = true;
-      parts.push(renderVergutung(true, {}));
-    }
-
-    if (isVergutung) {
-      vergutungDone = true;
-      const provided = {};
-      for (const line of content) {
-        if (line.includes(':')) {
-          const idx = line.indexOf(':');
-          provided[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-        }
-      }
-      parts.push(renderVergutung(true, provided));
-      continue;
-    }
-
     if (!content.length) continue;
 
-    // Section heading — explicit pageBreak control, never inherit from style
-    parts.push(`<w:p><w:pPr><w:pStyle w:val="berschrift2"/>${pageBreak ? '<w:pageBreakBefore/>' : '<w:pageBreakBefore w:val="0"/>'}<w:spacing w:before="120"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t xml:space="preserve">${xe(section.key.toUpperCase())}</w:t></w:r></w:p>`);
+    const ku = section.key.toUpperCase();
+    const isPersonal = ku.includes('PERS') && (ku.includes('NLICH') || ku.includes('ONAL'));
+    const isExperience = ku.includes('BERUFS') || ku.includes('BERUFLICHER') || ku.includes('WORK EXP') || ku.includes('PROFESSIONAL EXP');
+    const isKarriere = ku.includes('KARRIERE') || ku.includes('CAREER');
+    const isVergutung = ku.includes('VERG') || ku.includes('COMPENSATION');
+    const isKandidaten = ku.includes('FACHLICH') || ku.includes('BEWERTUNG') || ku.includes('PERSONALITY') || ku.includes('KANDIDATEN') || ku.includes('MOTIVATION');
+    const pageBreak = needsPageBreak(section.key);
+
+    parts.push(sectionHead(section.key.toUpperCase(), pageBreak));
     parts.push(hr());
 
     if (isPersonal) {
@@ -188,28 +193,49 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
         if (line.includes(':')) {
           const idx = line.indexOf(':');
           parts.push(personalRow(line.slice(0, idx).trim(), line.slice(idx + 1).trim()));
-        } else {
-          parts.push(np(line, 80, 80));
-        }
+        } else { parts.push(personalRow(line, '')); }
       }
       parts.push(np('', 120));
-      parts.push(np('', 120));
+      continue;
+    }
+
+    if (isVergutung) {
+      for (const line of content) {
+        if (line.includes(':')) {
+          const idx = line.indexOf(':');
+          const label = line.slice(0, idx).trim();
+          const value = line.slice(idx + 1).trim();
+          const labelRpr = rpr({ bold: true, sz: 22, color: '414042' });
+          const valueRpr = rpr({ sz: 22, color: '262626' });
+          parts.push(`<w:p>
+            <w:pPr>
+              <w:tabs><w:tab w:val="left" w:pos="2800"/></w:tabs>
+              <w:ind w:left="2800" w:hanging="2800"/>
+              <w:spacing w:before="140" w:after="140"/>
+            </w:pPr>
+            <w:r>${labelRpr}<w:t>${xe(label)}</w:t></w:r>
+            <w:r><w:rPr><w:color w:val="414042"/></w:rPr><w:tab/></w:r>
+            <w:r>${valueRpr}<w:t xml:space="preserve">${xe(value)}</w:t></w:r>
+          </w:p>`);
+        } else { parts.push(np(line, 140, 140, { bold: true, sz: 22 })); }
+      }
       parts.push(np('', 120));
       continue;
     }
 
     if (isKarriere) {
       for (const line of content) {
-        const cols = line.split(/\s{2,}|\t/);
-        if (cols.length >= 2) {
-          const d = cols[0].trim();
-          const f = cols[1].trim();
-          const t = cols.slice(2).join(' ').trim();
-          const tXml = t ? `<w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(t)}</w:t></w:r>` : '';
-          parts.push(`<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="1800"/><w:tab w:val="left" w:pos="5400"/></w:tabs><w:spacing w:before="120" w:after="60"/></w:pPr><w:r><w:rPr><w:color w:val="414042"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(d)}</w:t></w:r><w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t xml:space="preserve">${xe(f)}</w:t></w:r>${tXml}</w:p>`);
-        } else {
-          parts.push(np(line, 120, 60));
-        }
+        const pipeParts = line.split('|').map(s => s.trim());
+        if (pipeParts.length >= 2) {
+          const dateRpr = rpr({ sz: 22, color: '414042' });
+          const compRpr = rpr({ bold: true, sz: 22, color: '262626' });
+          const titleRpr = rpr({ sz: 22, color: '262626' });
+          parts.push(`<w:p><w:pPr><w:spacing w:before="120" w:after="120"/></w:pPr>
+            <w:r>${dateRpr}<w:t>${xe(pipeParts[0])}</w:t><w:tab/><w:tab/></w:r>
+            <w:r>${compRpr}<w:t xml:space="preserve">${xe(pipeParts[1])}</w:t></w:r>
+            ${pipeParts[2] ? `<w:r>${titleRpr}<w:t xml:space="preserve">  |  ${xe(pipeParts[2])}</w:t></w:r>` : ''}
+          </w:p>`);
+        } else { parts.push(np(line, 120, 120, { bold: true, sz: 22, color: '262626' })); }
       }
       parts.push(np('', 120));
       continue;
@@ -218,11 +244,8 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
     if (isKandidaten) {
       for (const line of content) {
         if (!line.trim()) continue;
-        if (/^[-•]/.test(line)) {
-          parts.push(sp('Listenabsatz', line.replace(/^[-•]\s*/, ''), 60, 120, { sz: 24 }));
-        } else {
-          parts.push(np(line, 160, 160, { jc: 'both', sz: 22 }));
-        }
+        if (/^[-•]/.test(line)) { parts.push(bullet(line.replace(/^[-•]\s*/, ''))); }
+        else { parts.push(np(line, 160, 160, { jc: 'both', sz: 22, color: '262626' })); }
       }
       parts.push(np('', 120));
       continue;
@@ -230,45 +253,41 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
 
     if (isExperience) {
       let firstCompany = true;
-      for (let i = 0; i < content.length; i++) {
+      let i = 0;
+      while (i < content.length) {
         const line = content[i];
-        const isBullet = /^[-–•]/.test(line);
+        const isBullet = /^[-\u2013\u2022]/.test(line);
         const isCompanyDesc = /^\*/.test(line);
-        const isCompanyHeader = /^(Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember|Jan\.|Feb\.|Mär\.|Apr\.|Jun\.|Jul\.|Aug\.|Sep\.|Okt\.|Nov\.|Dez\.|Oct\.|Sept?\.|Jan\s|Feb\s|\d{2}\/\d{4}|\d{4})/.test(line) && !isBullet;
-        if (isCompanyHeader) {
+        const isDateHeader = /^(Jan|Feb|M.r|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez|Oct|Mar|Januar|Februar|M.rz|April|Juni|Juli|August|September|Oktober|November|Dezember|January|February|March|April|May|June|July|August|September|October|November|December|\d{2}\/\d{4}|\d{4})/.test(line) && !isBullet;
+        if (isDateHeader) {
           if (!firstCompany) parts.push(hr());
           firstCompany = false;
-          const colonIdx = line.indexOf(':');
-          const dashIdx = line.indexOf(' - ', 8);
           let datePart = line, companyPart = '';
-          if (colonIdx > 0) { datePart = line.slice(0, colonIdx).trim(); companyPart = line.slice(colonIdx + 1).trim(); }
-          else if (dashIdx > 0) { datePart = line.slice(0, dashIdx).trim(); companyPart = line.slice(dashIdx + 3).trim(); }
-          if (companyPart) {
-            parts.push(`<w:p><w:pPr><w:pStyle w:val="Amrop-header"/><w:spacing w:before="120" w:after="120"/></w:pPr><w:r><w:rPr><w:color w:val="auto"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xe(datePart)}: </w:t></w:r><w:r><w:rPr><w:b/><w:color w:val="auto"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t xml:space="preserve">${xe(companyPart)}</w:t></w:r></w:p>`);
-          } else {
-            parts.push(sp('Amrop-header', line, 120, 120, { sz: 22 }));
-          }
+          const colonIdx = line.indexOf(': ');
+          const dashIdx = line.indexOf(' - ');
+          if (colonIdx > 4) { datePart = line.slice(0, colonIdx); companyPart = line.slice(colonIdx + 2); }
+          else if (dashIdx > 4) { datePart = line.slice(0, dashIdx); companyPart = line.slice(dashIdx + 3); }
+          parts.push(companyHeader(datePart, companyPart));
         } else if (isCompanyDesc) {
-          parts.push(sp('Listing1', line.replace(/^\*|\*$/g, ''), 120, undefined, { sz: 22 }));
+          const r = rpr({ sz: 22, color: '595959', italic: true });
+          parts.push(`<w:p><w:pPr><w:pStyle w:val="Listing1"/><w:spacing w:before="60" w:after="60"/>${r}</w:pPr>
+            <w:r>${r}<w:t xml:space="preserve">${xe(line.replace(/^\*|\*$/g, ''))}</w:t></w:r></w:p>`);
           parts.push(hr());
         } else if (isBullet) {
-          parts.push(sp('Listenabsatz', line.replace(/^[-–•]\s*/, ''), 60, 120, { sz: 24 }));
+          parts.push(bullet(line.replace(/^[-\u2013\u2022]\s*/, '')));
         } else if (line.trim()) {
-          parts.push(np(line, 120, 120, { bold: true, sz: 24 }));
+          parts.push(np(line, 120, 80, { bold: true, sz: 24, color: '262626' }));
         }
+        i++;
       }
       parts.push(np('', 120));
       continue;
     }
 
-    // Default (Ausbildung etc.)
-    for (const line of content) parts.push(np(line, 120, 120, { jc: 'both' }));
+    for (const line of content) {
+      parts.push(np(line, 120, 80, { sz: 22, color: '262626' }));
+    }
     parts.push(np('', 120));
-  }
-
-  // Inject Vergütung at end if never triggered
-  if (!vergutungDone) {
-    parts.push(renderVergutung(true, {}));
   }
 
   parts.push(np('', 240));
@@ -279,19 +298,14 @@ function buildBodyXml(reportText, candidateName, position, client, datum) {
 }
 
 async function updateHeaders(zip, candidateName, position, client) {
-  for (const hf of ['word/header1.xml','word/header2.xml','word/header3.xml','word/footer1.xml','word/footer2.xml','word/footer3.xml']) {
+  for (const hf of ['word/header1.xml','word/header2.xml','word/header3.xml']) {
     const file = zip.file(hf);
     if (!file) continue;
     let xml = await file.async('string');
     xml = xml.replace(/Quintin Stephen/g, xe(candidateName || ''));
-    xml = xml.replace(/Dr\. Sami Hamid(?!\s*\|)/g, xe(candidateName || ''));
     xml = xml.replace(/Director of Identity &amp; Authentication/g, xe(position || ''));
-    xml = xml.replace(/Director of Identity &amp;amp; Authentication/g, xe(position || ''));
-    xml = xml.replace(/Austriacard(?!\s*Holdings)/g, xe(client && client !== 'Vertraulich' ? client : 'Confidential'));
+    xml = xml.replace(/Austriacard/g, xe(client && client !== 'Vertraulich' ? client : 'Confidential'));
     xml = xml.replace(/AustriaCard Holdings[^<]*/g, xe(candidateName || ''));
-    if (position) {
-      xml = xml.replace(/(<w:t[^>]*>)Managing Partner(<\/w:t>)/g, `$1${xe(position)}$2`);
-    }
     zip.file(hf, xml);
   }
 }
@@ -302,19 +316,27 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
+
   try {
     const { text, candidateName, position, client, datum } = req.body;
     if (!text) return res.status(400).json({ error: 'No text provided' });
-    const templatePath = path.join(process.cwd(), 'template.docx');
-    const templateBuffer = fs.readFileSync(templatePath);
+
+    const templatePath = join(process.cwd(), 'template.docx');
+    const templateBuffer = readFileSync(templatePath);
     const zip = await JSZip.loadAsync(templateBuffer);
+
     await updateHeaders(zip, candidateName, position, client);
+
     const docXmlRaw = await zip.file('word/document.xml').async('string');
     const bodyStart = docXmlRaw.indexOf('<w:body>') + '<w:body>'.length;
     const bodyEnd = docXmlRaw.lastIndexOf('</w:body>');
     const sectPrMatch = docXmlRaw.match(/<w:sectPr[\s\S]*?<\/w:sectPr>/);
     const sectPr = sectPrMatch ? sectPrMatch[0] : '';
-    const newDocXml = docXmlRaw.substring(0, bodyStart) + '\n' + buildBodyXml(text, candidateName, position, client, datum) + '\n' + sectPr + '\n' + docXmlRaw.substring(bodyEnd);
+
+    const newDocXml = docXmlRaw.substring(0, bodyStart) + '\n' +
+      buildBodyXml(text, candidateName, position, client, datum) + '\n' +
+      sectPr + '\n' + docXmlRaw.substring(bodyEnd);
+
     zip.file('word/document.xml', newDocXml);
     const outputBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
     const safeName = (candidateName || 'Kandidat').replace(/\s+/g, '_');
