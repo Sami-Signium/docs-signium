@@ -137,7 +137,7 @@
     border-bottom: 2px solid #FF6A42;
   }
   .result-title { font-size: 14px; font-weight: 700; color: #081D4D; letter-spacing: 1.5px; text-transform: uppercase; }
-  .result-actions { display: flex; gap: 10px; }
+  .result-actions { display: flex; gap: 10px; flex-wrap: wrap; }
   .btn-download {
     padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
     cursor: pointer; border: none; transition: all 0.2s; letter-spacing: 0.5px;
@@ -145,6 +145,9 @@
   .btn-word { background: #081D4D; color: white; }
   .btn-word:hover { background: #0a2560; }
   .btn-word:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-fix { background: #FF6A42; color: white; }
+  .btn-fix:hover { background: #e55a32; }
+  .btn-fix:disabled { opacity: 0.6; cursor: not-allowed; }
   .btn-copy { background: #f0f3ff; color: #081D4D; border: 1px solid #c0c8d8; }
   .btn-copy:hover { background: #e0e6ff; }
 
@@ -220,7 +223,7 @@
         </div>
         <div class="form-group">
           <label>Datum</label>
-          <input type="text" class="form-input" id="datum" id="datum" placeholder="März 2026">
+          <input type="text" class="form-input" id="datum" placeholder="März 2026">
         </div>
       </div>
       <div class="form-group">
@@ -275,6 +278,7 @@
       <div class="result-title">Generiertes Dokument</div>
       <div class="result-actions">
         <button class="btn-download btn-word" id="wordBtn" onclick="downloadWord()">⬇ Download Word (.docx)</button>
+        <button class="btn-download btn-fix" id="fixBtn" onclick="downloadFixed()" style="display:none">🔧 Bereinigt downloaden</button>
         <button class="btn-download btn-copy" onclick="copyText()">📋 Text kopieren</button>
       </div>
     </div>
@@ -283,11 +287,13 @@
 
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 let generatedText = '';
 let currentDocType = 'kandidatenbericht';
 let cvText = '';
 let notesText = '';
+let lastDocxBlob = null;
 
 // ── LOGIN ──────────────────────────────────────────────────────────────────
 function doLogin() {
@@ -318,22 +324,13 @@ function setDocType(type, btn) {
 }
 
 // ── FILE HANDLING ──────────────────────────────────────────────────────────
-function dragOver(e, zoneId) {
-  e.preventDefault();
-  document.getElementById(zoneId).classList.add('dragover');
-}
-function dragLeave(zoneId) {
-  document.getElementById(zoneId).classList.remove('dragover');
-}
+function dragOver(e, zoneId) { e.preventDefault(); document.getElementById(zoneId).classList.add('dragover'); }
+function dragLeave(zoneId) { document.getElementById(zoneId).classList.remove('dragover'); }
 function dropFile(e, inputId, zoneId, statusId) {
-  e.preventDefault();
-  dragLeave(zoneId);
-  const file = e.dataTransfer.files[0];
-  if (!file) return;
+  e.preventDefault(); dragLeave(zoneId);
+  const file = e.dataTransfer.files[0]; if (!file) return;
   const input = document.getElementById(inputId);
-  const dt = new DataTransfer();
-  dt.items.add(file);
-  input.files = dt.files;
+  const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files;
   processFile(file, zoneId, statusId, inputId);
 }
 function handleFile(inputId, zoneId, statusId) {
@@ -347,30 +344,21 @@ async function processFile(file, zoneId, statusId, inputId) {
   const status = document.getElementById(statusId);
   status.textContent = 'Wird gelesen...';
   zone.classList.add('loaded');
-
   try {
-    // Convert file to base64 and send to server for extraction
     const base64 = await fileToBase64(file);
     const response = await fetch('/api/extract-text', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fileBase64: base64, fileName: file.name })
     });
-
     if (!response.ok) throw new Error('Extraktion fehlgeschlagen');
     const data = await response.json();
     const text = data.text || '';
-
     if (!text || text.length < 50) throw new Error('Kein Text gefunden');
-
-    if (inputId === 'cvFile') cvText = text;
-    else notesText = text;
-
+    if (inputId === 'cvFile') cvText = text; else notesText = text;
     status.textContent = '✓ ' + file.name.substring(0, 28) + (file.name.length > 28 ? '...' : '') + ' (' + Math.round(text.length/100)/10 + 'k Zeichen)';
   } catch (err) {
     status.textContent = '✗ Fehler: ' + err.message;
     zone.classList.remove('loaded');
-    console.error(err);
   }
 }
 
@@ -386,17 +374,15 @@ async function fileToBase64(file) {
 // ── GENERATE ───────────────────────────────────────────────────────────────
 async function generate() {
   if (currentDocType === 'kandidatenbericht' && !cvText) {
-    showError('Bitte zuerst einen CV hochladen.');
-    return;
+    showError('Bitte zuerst einen CV hochladen.'); return;
   }
-
   const btn = document.getElementById('generateBtn');
   const progress = document.getElementById('progressBar');
-  btn.disabled = true;
-  btn.textContent = 'Wird generiert...';
-  progress.style.display = 'block';
-  hideError();
+  btn.disabled = true; btn.textContent = 'Wird generiert...';
+  progress.style.display = 'block'; hideError();
   document.getElementById('resultCard').style.display = 'none';
+  lastDocxBlob = null;
+  document.getElementById('fixBtn').style.display = 'none';
 
   try {
     const lang = document.getElementById('language')?.value || 'DE';
@@ -405,40 +391,26 @@ async function generate() {
     const client = document.getElementById('client')?.value || 'Vertraulich';
     const datum = document.getElementById('datum')?.value || '';
 
-    let prompt = '';
-
-    if (currentDocType === 'kandidatenbericht') {
-      prompt = buildKandidatenPrompt(lang, name, pos, client, datum);
-    } else {
-      const freeText = document.getElementById('freeText')?.value || '';
-      prompt = `Erstelle ein professionelles Signium ${currentDocType} Dokument auf ${lang === 'DE' ? 'Deutsch' : 'Englisch'}.\n\nInhalt: ${freeText}`;
-    }
+    let prompt = currentDocType === 'kandidatenbericht'
+      ? buildKandidatenPrompt(lang, name, pos, client, datum)
+      : `Erstelle ein professionelles Signium ${currentDocType} Dokument auf ${lang === 'DE' ? 'Deutsch' : 'Englisch'}.\n\nInhalt: ${document.getElementById('freeText')?.value || ''}`;
 
     const response = await fetch('/api/docs-generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: [{ role: 'user', content: prompt }] })
     });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${response.status}`);
-    }
-
+    if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.error || `HTTP ${response.status}`); }
     const data = await response.json();
     generatedText = data.text || '';
-
     if (!generatedText) throw new Error('Leere Antwort vom Server');
 
     document.getElementById('resultText').textContent = generatedText;
     document.getElementById('resultCard').style.display = 'block';
     document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth' });
-
   } catch (err) {
     showError('Fehler: ' + err.message);
   } finally {
-    btn.disabled = false;
-    btn.textContent = '▶ DOKUMENT GENERIEREN';
+    btn.disabled = false; btn.textContent = '▶ DOKUMENT GENERIEREN';
     progress.style.display = 'none';
   }
 }
@@ -456,51 +428,31 @@ Sprache: ${isDE ? 'Deutsch' : 'English'}
 WICHTIGE REGELN:
 - Kein Markdown, keine ## Symbole
 - Abschnittstitel in GROSSBUCHSTABEN
-- Leere Abschnitte NIEMALS weglassen - immer alle Sektionen ausgeben, auch wenn keine Daten vorhanden
-- Bewertungstexte (Persönlichkeit, Motivation) aus den Notizen entnehmen oder aus dem Karrieremuster ableiten
+- Leere Abschnitte komplett weglassen
+- Bewertungstexte aus den Notizen entnehmen oder aus dem Karrieremuster ableiten
 - Für Berufserfahrung: Firmenbeschreibung in Kursiv (mit * markieren), dann Hauptverantwortlichkeiten und Key Achievements mit - Bullets
 
 STRUKTUR:
-${name || 'NAME DES KANDIDATEN'}
-${isDE ? 'VERTRAULICHER KANDIDATENBERICHT' : 'CONFIDENTIAL CANDIDATE REPORT'}
-${pos || ''}
-${datum}
-
-[Vertraulichkeitshinweis]
-
-PERSÖNLICHE ANGABEN
+PERSOENLICHE ANGABEN
 Name: 
-Geburtsdatum: WICHTIGE REGELN:
-- Geburtsdatum: NUR das Datum angeben, NIEMALS das Alter berechnen oder hinzufügen
-- Kein Markdown, keine ## Symbole
-...
+Geburtsdatum: 
 Wohnort: 
 Nationalität: 
 Sprachen: 
 
 AUSBILDUNG UND QUALIFIKATIONEN
-[chronologisch]
 
-VERGÜTUNG UND VERFÜGBARKEIT
-Aktuelles Fixgehalt: [aus Unterlagen entnehmen oder leer lassen]
-Aktueller Bonus: [aus Unterlagen entnehmen oder leer lassen]
-Gehaltsvorstellung: [aus Unterlagen entnehmen oder leer lassen]
-Kündigungsfrist: [aus Unterlagen entnehmen oder leer lassen]
-Verfügbarkeit: [aus Unterlagen entnehmen oder leer lassen]
-Reisebereitschaft: [aus Unterlagen entnehmen oder leer lassen]
+VERGUETUNG UND VERFUEGBARKEIT
+
 KARRIERE ZUSAMMENFASSUNG
-[Zeitraum | Unternehmen | Titel, chronologisch rückwärts]
 
 KANDIDATENBEWERTUNG
 
-FACHLICHES RESÜMEE
-[3-4 Paragraphen aus Berater-Perspektive]
+FACHLICHES RESUEMEE
 
 BEWERTUNG
-[Persönlichkeit, Führungsstil - aus Notizen oder aus Karrieremuster]
 
 BERUFSERFAHRUNG
-[detailliert mit Firmeninfo, Verantwortlichkeiten, Achievements]
 
 ---
 CV-INHALT:
@@ -511,11 +463,8 @@ ${notesText ? '\nGESPRÄCHSNOTIZEN:\n' + notesText : ''}`;
 // ── DOWNLOAD WORD ──────────────────────────────────────────────────────────
 async function downloadWord() {
   if (!generatedText) return;
-
   const btn = document.getElementById('wordBtn');
-  btn.disabled = true;
-  btn.textContent = 'Wird erstellt...';
-
+  btn.disabled = true; btn.textContent = 'Wird erstellt...';
   try {
     const name = document.getElementById('candidateName')?.value || '';
     const pos = document.getElementById('position')?.value || '';
@@ -523,32 +472,68 @@ async function downloadWord() {
     const datum = document.getElementById('datum')?.value || '';
 
     const response = await fetch('/api/generate-docx', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: generatedText, candidateName: name, position: pos, client, datum })
     });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${response.status}`);
-    }
+    if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.error || `HTTP ${response.status}`); }
 
     const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = (name ? name.replace(/\s+/g, '_') : 'Kandidat') + '_Signium_Bericht.docx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    lastDocxBlob = blob;
+
+    // Trigger download
+    triggerDownload(blob, (name ? name.replace(/\s+/g, '_') : 'Kandidat') + '_Signium_Bericht.docx');
+
+    // Show fix button
+    document.getElementById('fixBtn').style.display = 'inline-block';
 
   } catch (err) {
     showError('Download-Fehler: ' + err.message);
   } finally {
-    btn.disabled = false;
-    btn.textContent = '⬇ Download Word (.docx)';
+    btn.disabled = false; btn.textContent = '⬇ Download Word (.docx)';
   }
+}
+
+// ── DOWNLOAD FIXED (removes Titleheader + fixes tabs in browser) ───────────
+async function downloadFixed() {
+  if (!lastDocxBlob) { showError('Bitte zuerst das Word-Dokument downloaden.'); return; }
+  const btn = document.getElementById('fixBtn');
+  btn.disabled = true; btn.textContent = 'Wird bereinigt...';
+
+  try {
+    const arrayBuffer = await lastDocxBlob.arrayBuffer();
+    const zip = await JSZip.loadAsync(arrayBuffer);
+
+    let xml = await zip.file('word/document.xml').async('string');
+
+    // 1. Remove Titleheader paragraph
+    xml = xml.replace(/<w:p[^>]*>(?:(?!<w:p[ >]).)*?<w:pStyle w:val="Titleheader"\/>(?:(?!<\/w:p>).)*<\/w:p>/gs, '');
+
+    // 2. Fix SPTBodytext66 rows: add real tab stop, replace multiple tabs with one
+    xml = xml.replace(
+      /(<w:pStyle w:val="SPTBodytext66"\/>)/g,
+      '$1<w:tabs><w:tab w:val="left" w:pos="2800"/></w:tabs><w:spacing w:before="80" w:after="80"/><w:ind w:left="2800" w:hanging="2800"/>'
+    );
+    xml = xml.replace(/(<w:tab\/>[\s]*){2,}/g, '<w:tab/>');
+
+    zip.file('word/document.xml', xml);
+    const fixedBuffer = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+
+    const name = document.getElementById('candidateName')?.value || 'Kandidat';
+    triggerDownload(fixedBuffer, name.replace(/\s+/g, '_') + '_Signium_Bericht_final.docx');
+
+  } catch (err) {
+    showError('Fehler beim Bereinigen: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '🔧 Bereinigt downloaden';
+  }
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 function copyText() {
@@ -559,14 +544,8 @@ function copyText() {
   });
 }
 
-function showError(msg) {
-  const el = document.getElementById('errorMsg');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-function hideError() {
-  document.getElementById('errorMsg').style.display = 'none';
-}
+function showError(msg) { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; }
+function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
 </script>
 </body>
 </html>
