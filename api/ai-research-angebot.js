@@ -11,12 +11,38 @@ export default async function handler(req, res) {
   // ── MODE: EXTRACT ─────────────────────────────────────────────────────────
   if (mode === 'extract') {
     const { fileBase64, mediaType } = body;
+
+    let contentForClaude;
+
+    if (mediaType === 'application/pdf') {
+      // PDF: direkt als document an Claude
+      contentForClaude = [
+        { type: 'document', source: { type: 'base64', media_type: mediaType, data: fileBase64 } },
+        { type: 'text', text: isDE
+          ? 'Analysiere dieses Dokument und extrahiere alle Felder als JSON.'
+          : 'Analyse this document and extract all fields as JSON.' }
+      ];
+    } else {
+      // DOCX oder anderes: Text mit mammoth extrahieren
+      try {
+        const mammoth = await import('mammoth');
+        const buffer = Buffer.from(fileBase64, 'base64');
+        const result = await mammoth.extractRawText({ buffer });
+        const extractedText = result.value;
+        contentForClaude = [
+          { type: 'text', text: (isDE
+            ? 'Analysiere dieses Dokument und extrahiere alle Felder als JSON.\n\nDOKUMENT-INHALT:\n'
+            : 'Analyse this document and extract all fields as JSON.\n\nDOCUMENT CONTENT:\n') + extractedText }
+        ];
+      } catch (e) {
+        return res.status(500).json({ error: 'DOCX-Parsing fehlgeschlagen: ' + e.message });
+      }
+    }
+
     const system = isDE
       ? `Du bist ein Executive Search Berater bei Signium Austria. Analysiere das hochgeladene Dokument und extrahiere alle relevanten Informationen. Antworte NUR mit einem JSON-Objekt, kein Text davor oder danach, keine Markdown-Backticks. JSON-Struktur: {"positionTitle":"","clientCompany":"","clientContactName":"","clientContactLastName":"","clientSalutation":"","clientAddress":"","clientCity":"","clientEmail":"","companyProfile":"Professioneller Fließtext 200-300 Wörter","positionDescription":"Professioneller Fließtext 150-250 Wörter","functionalTargets":[],"industryTargets":[],"geoTargets":[]}`
       : `You are an Executive Search consultant at Signium Austria. Analyse the uploaded document and extract all relevant information. Respond ONLY with a JSON object, no text before or after, no markdown backticks. JSON structure: {"positionTitle":"","clientCompany":"","clientContactName":"","clientContactLastName":"","clientSalutation":"","clientAddress":"","clientCity":"","clientEmail":"","companyProfile":"Professional prose 200-300 words","positionDescription":"Professional prose 150-250 words","functionalTargets":[],"industryTargets":[],"geoTargets":[]}`;
-    const userMsg = isDE
-      ? 'Analysiere dieses Dokument und extrahiere alle Felder als JSON.'
-      : 'Analyse this document and extract all fields as JSON.';
+
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -25,10 +51,7 @@ export default async function handler(req, res) {
           model: 'claude-sonnet-4-5',
           max_tokens: 2048,
           system,
-          messages: [{ role: 'user', content: [
-            { type: 'document', source: { type: 'base64', media_type: mediaType, data: fileBase64 } },
-            { type: 'text', text: userMsg }
-          ]}],
+          messages: [{ role: 'user', content: contentForClaude }],
         }),
       });
       if (!response.ok) throw new Error(`API ${response.status}`);
