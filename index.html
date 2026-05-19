@@ -388,6 +388,31 @@ var now = new Date();
 var days = { de:['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'], en:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] };
 var months = { de:['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'], en:['January','February','March','April','May','June','July','August','September','October','November','December'] };
 
+function toggleMedia(el) {
+  var isActive = el.classList.toggle('active');
+  if (isActive) {
+    el.style.borderColor = '#C0392B';
+    el.style.background = 'rgba(192,57,43,0.05)';
+  } else {
+    el.style.borderColor = '';
+    el.style.background = '';
+  }
+}
+
+function selectAllMedia(checked) {
+  document.querySelectorAll('.media-card[data-source]').forEach(function(card) {
+    if (checked) {
+      card.classList.add('active');
+      card.style.borderColor = '#C0392B';
+      card.style.background = 'rgba(192,57,43,0.05)';
+    } else {
+      card.classList.remove('active');
+      card.style.borderColor = '';
+      card.style.background = '';
+    }
+  });
+}
+
 function updateDate() {
   var el = document.getElementById('hero-date');
   if (el) el.innerHTML = days[currentLang][now.getDay()] + '<br>' + now.getDate() + '. ' + months[currentLang][now.getMonth()] + ' ' + now.getFullYear();
